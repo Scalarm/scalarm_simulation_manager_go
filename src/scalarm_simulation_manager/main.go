@@ -330,7 +330,7 @@ func main() {
 		var simulation_run map[string]interface{}
 
 		// 4.a getting input values for next simulation run
-		for communicationStart.Add(time.Duration(int(communicationTimeout) * len(experimentManagers))).After(time.Now()) {
+		for communicationStart.Add(communicationTimeout * time.Duration(len(experimentManagers))).After(time.Now()) {
 			fmt.Println("[SiM] Getting next simulation run ...")
 			nextSimulationUrl := fmt.Sprintf("experiments/%s/next_simulation", config.ExperimentId)
 			nextSimulationInfo := RequestInfo{"GET", nil, "", nextSimulationUrl}
