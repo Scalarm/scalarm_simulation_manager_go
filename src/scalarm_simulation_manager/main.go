@@ -7,6 +7,7 @@ package main
 import (
 	"bytes"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -120,10 +121,10 @@ func GetWithTimeout(client *http.Client, request *http.Request, communicationTim
 func IntermediateMonitoring(messages chan string, codeBaseDir string, experimentManagers []string, simIndex float64, config *SimulationManagerConfig, simulationDirPath string) {
 	communicationTimeout := 30 * time.Second
 
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-	client := &http.Client{Transport: tr}
+// 	tr := &http.Transport{
+// 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+// 	}
+	client := &http.Client{}
 
 	if _, err := os.Stat(path.Join(codeBaseDir, "progress_monitor")); err == nil {
 		for {
@@ -226,10 +227,19 @@ func main() {
 	}
 	communicationTimeout := time.Duration(config.Timeout) * time.Second
 
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+// 	tr := &http.Transport{
+// 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+// 	}
+	CA_Pool := x509.NewCertPool()
+	severCert, err := ioutil.ReadFile("root.crt")
+	if err != nil {
+		fmt.Println("An error occured: could not load Scalarm certificate")
 	}
-	client := &http.Client{Transport: tr}
+	CA_Pool.AppendCertsFromPEM(severCert)
+
+	client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: CA_Pool}}}
+
+	//client := &http.Client{}
 
 	if len(config.StartAt) > 0 {
 		startTime, err := time.Parse(time.RFC3339, config.StartAt)
