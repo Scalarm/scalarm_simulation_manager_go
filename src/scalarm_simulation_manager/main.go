@@ -1,10 +1,10 @@
 package main
 
-// TODO unzipping should be cross-platform
 // TODO CPU type and MHz monitoring
 // TODO getting random experiment id when there is no one in the config
 
 import (
+	"archive/zip"
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
@@ -50,8 +50,57 @@ type RequestInfo struct {
 }
 
 func Fatal(err error) {
-	fmt.Printf(err.Error())
+	fmt.Println(err.Error())
 	os.Exit(1)
+}
+
+func cloneZipItem(f *zip.File, dest string) error {
+	//create full directory path
+	path := filepath.Join(dest, f.Name)
+
+	err := os.MkdirAll(filepath.Dir(path), os.ModeDir|os.ModePerm)
+	if err != nil {
+		return err
+	}
+
+	//clone if item is a file
+	rc, err := f.Open()
+	if err != nil {
+		return err
+	}
+
+	if !f.FileInfo().IsDir() {
+
+		fileCopy, err := os.Create(path)
+		if err != nil {
+			return err
+		}
+
+		_, err = io.Copy(fileCopy, rc)
+		fileCopy.Close()
+		if err != nil {
+			return err
+		}
+	}
+	rc.Close()
+	return nil
+}
+
+func Extract(zip_path, dest string) error {
+	r, err := zip.OpenReader(zip_path)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	for _, f := range r.File {
+		err = cloneZipItem(f, dest)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func ExecuteScalarmRequest(reqInfo RequestInfo, serviceUrls []string, config *SimulationManagerConfig,
@@ -313,10 +362,14 @@ func main() {
 			Fatal(err)
 		}
 
-		unzipCmd := fmt.Sprintf("unzip -d \"%s\" \"%s/code_base.zip\"; unzip -d \"%s\" \"%s/simulation_binaries.zip\"", codeBaseDir, codeBaseDir, codeBaseDir, codeBaseDir)
-		if err = exec.Command("sh", "-c", unzipCmd).Run(); err != nil {
+		if err = Extract(codeBaseDir+"/code_base.zip", codeBaseDir); err != nil {
 			fmt.Println("[SiM] An error occurred while unzipping 'code_base.zip'.")
-			fmt.Printf("[Fatal error] occured during '%v' execution \n", unzipCmd)
+			fmt.Println("[Fatal error] occured while unzipping 'code_base.zip'.")
+			os.Exit(2)
+		}
+		if err = Extract(codeBaseDir+"/simulation_binaries.zip", codeBaseDir); err != nil {
+			fmt.Println("[SiM] An error occurred while unzipping 'simulation_binaries.zip'.")
+			fmt.Println("[Fatal error] occured while unzipping 'simulation_binaries.zip'.")
 			os.Exit(2)
 		}
 
