@@ -49,6 +49,11 @@ type RequestInfo struct {
 	ServiceMethod string
 }
 
+func Fatal(err error) {
+	fmt.Printf(err.Error())
+	os.Exit(1)
+}
+
 func ExecuteScalarmRequest(reqInfo RequestInfo, serviceUrls []string, config *SimulationManagerConfig,
 	client *http.Client, timeout time.Duration) []byte {
 
@@ -66,7 +71,7 @@ func ExecuteScalarmRequest(reqInfo RequestInfo, serviceUrls []string, config *Si
 		fmt.Printf("[SiM] %s://%s/%s\n", protocol, serviceUrl, reqInfo.ServiceMethod)
 		req, err := http.NewRequest(reqInfo.HttpMethod, fmt.Sprintf("%s://%s/%s", protocol, serviceUrl, reqInfo.ServiceMethod), reqInfo.Body)
 		if err != nil {
-			panic(err)
+			Fatal(err)
 		}
 		req.SetBasicAuth(config.ExperimentManagerUser, config.ExperimentManagerPass)
 		if reqInfo.Body != nil {
@@ -80,7 +85,8 @@ func ExecuteScalarmRequest(reqInfo RequestInfo, serviceUrls []string, config *Si
 		}
 	}
 
-	panic("Could not execute request against Scalarm service")
+	Fatal(fmt.Errorf("Could not execute request against Scalarm service"))
+	return nil
 }
 
 // Calling Get multiple time until valid response or exceed 'communicationTimeout' period
@@ -202,7 +208,7 @@ func main() {
 	rootDirPath, _ := os.Getwd()
 	rootDir, err := os.Open(rootDirPath)
 	if err != nil {
-		panic(err)
+		Fatal(err)
 	}
 
 	fmt.Printf("[SiM] working directory: %s\n", rootDirPath)
@@ -210,7 +216,7 @@ func main() {
 	// 1. load config file
 	configFile, err := os.Open("config.json")
 	if err != nil {
-		panic(err)
+		Fatal(err)
 	}
 
 	config := new(SimulationManagerConfig)
@@ -218,7 +224,7 @@ func main() {
 	configFile.Close()
 
 	if err != nil {
-		panic(err)
+		Fatal(err)
 	}
 
 	if config.Timeout <= 0 {
@@ -253,7 +259,7 @@ func main() {
 	fmt.Printf("[SiM] Response body: %s.\n", body)
 
 	if err := json.Unmarshal(body, &experimentManagers); err != nil {
-		panic(err)
+		Fatal(err)
 	}
 
 	if len(experimentManagers) == 0 {
@@ -270,7 +276,7 @@ func main() {
 	fmt.Printf("[SiM] Response body: %s.\n", body)
 
 	if err := json.Unmarshal(body, &storageManagers); err != nil {
-		panic(err)
+		Fatal(err)
 	}
 
 	if len(storageManagers) == 0 {
@@ -282,7 +288,7 @@ func main() {
 	experimentDir = path.Join(rootDirPath, fmt.Sprintf("experiment_%s", config.ExperimentId))
 
 	if err = os.MkdirAll(experimentDir, 0777); err != nil {
-		panic(err)
+		Fatal(err)
 	}
 
 	// 3. get code base for the experiment if necessary
@@ -290,7 +296,7 @@ func main() {
 
 	if _, err := os.Stat(codeBaseDir); os.IsNotExist(err) {
 		if err = os.MkdirAll(codeBaseDir, 0777); err != nil {
-			panic(err)
+			Fatal(err)
 		}
 		fmt.Println("[SiM] Getting code base ...")
 		codeBaseUrl := fmt.Sprintf("experiments/%s/code_base", config.ExperimentId)
@@ -299,12 +305,12 @@ func main() {
 
 		w, err := os.Create(path.Join(codeBaseDir, "code_base.zip"))
 		if err != nil {
-			panic(err)
+			Fatal(err)
 		}
 		defer w.Close()
 
 		if _, err = io.Copy(w, bytes.NewReader(body)); err != nil {
-			panic(err)
+			Fatal(err)
 		}
 
 		unzipCmd := fmt.Sprintf("unzip -d \"%s\" \"%s/code_base.zip\"; unzip -d \"%s\" \"%s/simulation_binaries.zip\"", codeBaseDir, codeBaseDir, codeBaseDir, codeBaseDir)
@@ -373,25 +379,25 @@ func main() {
 
 		err = os.MkdirAll(simulationDirPath, 0777)
 		if err != nil {
-			panic(err)
+			Fatal(err)
 		}
 
 		input_parameters, _ := json.Marshal(simulation_run["input_parameters"].(map[string]interface{}))
 
 		err = ioutil.WriteFile(path.Join(simulationDirPath, "input.json"), input_parameters, 0777)
 		if err != nil {
-			panic(err)
+			Fatal(err)
 		}
 
 		simulationDir, err := os.Open(simulationDirPath)
 		if err != nil {
-			panic(err)
+			Fatal(err)
 		}
 
 		wd, err := os.Getwd()
 		fmt.Printf("[SiM] Working dir: %v\n", wd)
 		if err = simulationDir.Chdir(); err != nil {
-			panic(err)
+			Fatal(err)
 		}
 		wd, err = os.Getwd()
 
@@ -489,7 +495,7 @@ func main() {
 				file, err := os.Open("output.tar.gz")
 
 				if err != nil {
-					panic(err)
+					Fatal(err)
 				}
 
 				defer file.Close()
@@ -498,13 +504,13 @@ func main() {
 				writer := multipart.NewWriter(requestBody)
 				part, err := writer.CreateFormFile("file", filepath.Base("output.tar.gz"))
 				if err != nil {
-					panic(err)
+					Fatal(err)
 				}
 				_, err = io.Copy(part, file)
 
 				err = writer.Close()
 				if err != nil {
-					panic(err)
+					Fatal(err)
 				}
 
 				binariesUploadUrl := fmt.Sprintf("experiments/%s/simulations/%v", config.ExperimentId, simulation_index)
@@ -520,21 +526,21 @@ func main() {
 
 				file, err := os.Open("_stdout.txt")
 				if err != nil {
-					panic(err)
+					Fatal(err)
 				}
 
 				requestBody := &bytes.Buffer{}
 				writer := multipart.NewWriter(requestBody)
 				part, err := writer.CreateFormFile("file", filepath.Base("_stdout.txt"))
 				if err != nil {
-					panic(err)
+					Fatal(err)
 				}
 				_, err = io.Copy(part, file)
 				file.Close()
 
 				err = writer.Close()
 				if err != nil {
-					panic(err)
+					Fatal(err)
 				}
 
 				stdoutUploadUrl := fmt.Sprintf("experiments/%s/simulations/%v/stdout", config.ExperimentId, simulation_index)
@@ -550,7 +556,7 @@ func main() {
 
 		// 6. going to the root dir and moving
 		if err = rootDir.Chdir(); err != nil {
-			panic(err)
+			Fatal(err)
 		}
 	}
 }
