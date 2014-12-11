@@ -57,6 +57,14 @@ func Fatal(err error) {
 	os.Exit(1)
 }
 
+func PrintStdoutLog() {
+	linesNum := "100" // TODO: make int strconv.Itoa(linesNum)
+	stdoutPath := "_stdout.txt"
+	out, _ := exec.Command("tail", "-n", linesNum, stdoutPath).CombinedOutput()
+	fmt.Printf("----------\nLast %v lines of %v:\n----------\n", linesNum, stdoutPath)
+	fmt.Println(string(out))
+}
+
 func cloneZipItem(f *zip.File, dest string) error {
 	//create full directory path
 	path := filepath.Join(dest, f.Name)
@@ -187,6 +195,7 @@ func IntermediateMonitoring(messages chan string, codeBaseDir string, experiment
 				fmt.Println("[SiM] An error occurred during 'progress_monitor' execution.")
 				fmt.Println("[SiM] Please check if 'progress_monitor' executes correctly on the selected infrastructure.")
 				fmt.Printf("[Fatal error] occured during '%v' execution \n", strings.Join(progressMonitorCmd.Args, " "))
+				PrintStdoutLog()
 				os.Exit(1)
 			}
 
@@ -476,6 +485,7 @@ func main() {
 				fmt.Println("[SiM] An error occurred during 'input_writer' execution.")
 				fmt.Println("[SiM] Please check if 'input_writer' executes correctly on the selected infrastructure.")
 				fmt.Printf("[Fatal error] occured during '%v' execution \n", strings.Join(inputWriterCmd.Args, " "))
+				PrintStdoutLog()
 				os.Exit(1)
 			}
 			fmt.Println("[SiM] After input writer ...")
@@ -493,6 +503,7 @@ func main() {
 			fmt.Println("[SiM] An error occurred during 'executor' execution.")
 			fmt.Println("[SiM] Please check if 'executor' executes correctly on the selected infrastructure.")
 			fmt.Printf("[Fatal error] occured during '%v' execution \n", strings.Join(executorCmd.Args, " "))
+			PrintStdoutLog()
 			os.Exit(1)
 		}
 		fmt.Println("[SiM] After executor ...")
@@ -509,6 +520,7 @@ func main() {
 				fmt.Println("[SiM] An error occurred during 'output_reader' execution.")
 				fmt.Println("[SiM] Please check if 'output_reader' executes correctly on the selected infrastructure.")
 				fmt.Printf("[Fatal error] occured during '%v' execution \n", strings.Join(outputReaderCmd.Args, " "))
+				PrintStdoutLog()
 				os.Exit(1)
 			}
 			fmt.Println("[SiM] After output reader ...")
