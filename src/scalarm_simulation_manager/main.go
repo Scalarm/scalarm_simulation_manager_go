@@ -195,6 +195,7 @@ func IntermediateMonitoring(messages chan string, finished chan struct{}, codeBa
 				fmt.Println("[SiM] An error occurred during 'progress_monitor' execution.")
 				fmt.Println("[SiM] Please check if 'progress_monitor' executes correctly on the selected infrastructure.")
 				fmt.Printf("[Fatal error] occured during '%v' execution \n", strings.Join(progressMonitorCmd.Args, " "))
+				fmt.Printf("[Fatal error] %s\n", err.Error())
 				PrintStdoutLog()
 				os.Exit(1)
 			}
