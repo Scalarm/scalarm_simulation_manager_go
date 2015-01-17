@@ -27,15 +27,15 @@ import (
 
 // Config file description - this should be provided by Experiment Manager in 'config.json'
 type SimulationManagerConfig struct {
-	ExperimentId          string `json:"experiment_id"`
-	InformationServiceUrl string `json:"information_service_url"`
-	ExperimentManagerUser string `json:"experiment_manager_user"`
-	ExperimentManagerPass string `json:"experiment_manager_pass"`
-	Development           bool   `json:"development"`
-	StartAt               string `json:"start_at"`
-	Timeout               int    `json:"timeout"`
+	ExperimentId           string `json:"experiment_id"`
+	InformationServiceUrl  string `json:"information_service_url"`
+	ExperimentManagerUser  string `json:"experiment_manager_user"`
+	ExperimentManagerPass  string `json:"experiment_manager_pass"`
+	Development            bool   `json:"development"`
+	StartAt                string `json:"start_at"`
+	Timeout                int    `json:"timeout"`
 	ScalarmCertificatePath string `json:"scalarm_certificate_path"`
-	InsecureSSL           bool   `json:"insecure_ssl"`
+	InsecureSSL            bool   `json:"insecure_ssl"`
 }
 
 // Results structure - we send this back to Experiment Manager
@@ -201,11 +201,11 @@ func IntermediateMonitoring(messages chan string, codeBaseDir string, experiment
 
 			intermediateResults := new(SimulationRunResults)
 
-			if _, err := os.Stat("output.json"); os.IsNotExist(err) {
+			if _, err := os.Stat("intermediate_result.json"); os.IsNotExist(err) {
 				intermediateResults.Status = "error"
 				intermediateResults.Reason = "No 'intermediate_result.json' file found"
 			} else {
-				file, err := os.Open("output.json")
+				file, err := os.Open("intermediate_result.json")
 
 				if err != nil {
 					intermediateResults.Status = "error"
@@ -293,7 +293,7 @@ func main() {
 	var client *http.Client
 	tlsConfig := tls.Config{InsecureSkipVerify: config.InsecureSSL}
 
-	if (config.ScalarmCertificatePath != "") {
+	if config.ScalarmCertificatePath != "" {
 		CA_Pool := x509.NewCertPool()
 		severCert, err := ioutil.ReadFile(config.ScalarmCertificatePath)
 		if err != nil {
