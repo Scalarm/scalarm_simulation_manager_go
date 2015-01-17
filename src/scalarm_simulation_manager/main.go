@@ -183,7 +183,7 @@ func GetWithTimeout(client *http.Client, request *http.Request, communicationTim
 }
 
 // this method executes progress monitor of a simulation run and stops when it gets a signal from the main thread
-func IntermediateMonitoring(messages chan string, codeBaseDir string, experimentManagers []string, simIndex float64, config *SimulationManagerConfig, simulationDirPath string, client *http.Client) {
+func IntermediateMonitoring(messages chan string, finished chan struct{}, codeBaseDir string, experimentManagers []string, simIndex float64, config *SimulationManagerConfig, simulationDirPath string, client *http.Client) {
 	communicationTimeout := 30 * time.Second
 
 	if _, err := os.Stat(path.Join(codeBaseDir, "progress_monitor")); err == nil {
@@ -240,17 +240,17 @@ func IntermediateMonitoring(messages chan string, codeBaseDir string, experiment
 				fmt.Printf("[SiM][progress_info] Response body: %s\n", body)
 			}
 
+			time.Sleep(10 * time.Second)
 			select {
 			case _ = <-messages:
 				fmt.Printf("[SiM][progress_info] Our work is finished\n")
+				finished <- struct{}{}
 				return
-			default:
-				time.Sleep(10 * time.Second)
 			}
 		}
 	} else {
 		fmt.Printf("[SiM][progress_info] There is no progress monitor script\n")
-		<-messages
+		finished <- struct{}{}
 	}
 }
 
@@ -493,7 +493,8 @@ func main() {
 
 		// 4c.1. progress monitoring scheduling if available - TODO
 		messages := make(chan string, 10)
-		go IntermediateMonitoring(messages, codeBaseDir, experimentManagers, simulation_index, config, simulationDirPath, client)
+		finished := make(chan struct{}, 1)
+		go IntermediateMonitoring(messages, finished, codeBaseDir, experimentManagers, simulation_index, config, simulationDirPath, client)
 
 		// 4c. run an executor of this simulation
 		fmt.Println("[SiM] Before executor ...")
@@ -630,7 +631,13 @@ func main() {
 		}
 
 		// 5. clean up - removing simulation dir
-		os.RemoveAll(simulationDirPath)
+		go func() {
+			select {
+			case _ = <-finished:
+				os.RemoveAll(simulationDirPath)
+				close(finished)
+			}
+		}()
 
 		// 6. going to the root dir and moving
 		if err = rootDir.Chdir(); err != nil {
