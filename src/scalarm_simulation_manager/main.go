@@ -316,9 +316,7 @@ func main() {
 			fmt.Printf("[SiM] %v\n", err)
 		} else {
 			fmt.Println("[SiM] We have start_at provided")
-			for startTime.After(time.Now()) {
-				time.Sleep(1 * time.Second)
-			}
+			time.Sleep(startTime.Sub(time.Now()))
 			fmt.Println("[SiM] We are ready to work")
 		}
 	}
