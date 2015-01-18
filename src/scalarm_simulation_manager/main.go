@@ -27,15 +27,15 @@ import (
 
 // Config file description - this should be provided by Experiment Manager in 'config.json'
 type SimulationManagerConfig struct {
-	ExperimentId          string `json:"experiment_id"`
-	InformationServiceUrl string `json:"information_service_url"`
-	ExperimentManagerUser string `json:"experiment_manager_user"`
-	ExperimentManagerPass string `json:"experiment_manager_pass"`
-	Development           bool   `json:"development"`
-	StartAt               string `json:"start_at"`
-	Timeout               int    `json:"timeout"`
+	ExperimentId           string `json:"experiment_id"`
+	InformationServiceUrl  string `json:"information_service_url"`
+	ExperimentManagerUser  string `json:"experiment_manager_user"`
+	ExperimentManagerPass  string `json:"experiment_manager_pass"`
+	Development            bool   `json:"development"`
+	StartAt                string `json:"start_at"`
+	Timeout                int    `json:"timeout"`
 	ScalarmCertificatePath string `json:"scalarm_certificate_path"`
-	InsecureSSL           bool   `json:"insecure_ssl"`
+	InsecureSSL            bool   `json:"insecure_ssl"`
 }
 
 // Results structure - we send this back to Experiment Manager
@@ -183,7 +183,7 @@ func GetWithTimeout(client *http.Client, request *http.Request, communicationTim
 }
 
 // this method executes progress monitor of a simulation run and stops when it gets a signal from the main thread
-func IntermediateMonitoring(messages chan string, codeBaseDir string, experimentManagers []string, simIndex float64, config *SimulationManagerConfig, simulationDirPath string, client *http.Client) {
+func IntermediateMonitoring(messages chan string, finished chan struct{}, codeBaseDir string, experimentManagers []string, simIndex float64, config *SimulationManagerConfig, simulationDirPath string, client *http.Client) {
 	communicationTimeout := 30 * time.Second
 
 	if _, err := os.Stat(path.Join(codeBaseDir, "progress_monitor")); err == nil {
@@ -195,17 +195,18 @@ func IntermediateMonitoring(messages chan string, codeBaseDir string, experiment
 				fmt.Println("[SiM] An error occurred during 'progress_monitor' execution.")
 				fmt.Println("[SiM] Please check if 'progress_monitor' executes correctly on the selected infrastructure.")
 				fmt.Printf("[Fatal error] occured during '%v' execution \n", strings.Join(progressMonitorCmd.Args, " "))
+				fmt.Printf("[Fatal error] %s\n", err.Error())
 				PrintStdoutLog()
 				os.Exit(1)
 			}
 
 			intermediateResults := new(SimulationRunResults)
 
-			if _, err := os.Stat("output.json"); os.IsNotExist(err) {
+			if _, err := os.Stat("intermediate_result.json"); os.IsNotExist(err) {
 				intermediateResults.Status = "error"
 				intermediateResults.Reason = "No 'intermediate_result.json' file found"
 			} else {
-				file, err := os.Open("output.json")
+				file, err := os.Open("intermediate_result.json")
 
 				if err != nil {
 					intermediateResults.Status = "error"
@@ -240,17 +241,18 @@ func IntermediateMonitoring(messages chan string, codeBaseDir string, experiment
 				fmt.Printf("[SiM][progress_info] Response body: %s\n", body)
 			}
 
+			time.Sleep(10 * time.Second)
 			select {
 			case _ = <-messages:
 				fmt.Printf("[SiM][progress_info] Our work is finished\n")
+				finished <- struct{}{}
 				return
 			default:
-				time.Sleep(10 * time.Second)
 			}
 		}
 	} else {
 		fmt.Printf("[SiM][progress_info] There is no progress monitor script\n")
-		<-messages
+		finished <- struct{}{}
 	}
 }
 
@@ -293,7 +295,7 @@ func main() {
 	var client *http.Client
 	tlsConfig := tls.Config{InsecureSkipVerify: config.InsecureSSL}
 
-	if (config.ScalarmCertificatePath != "") {
+	if config.ScalarmCertificatePath != "" {
 		CA_Pool := x509.NewCertPool()
 		severCert, err := ioutil.ReadFile(config.ScalarmCertificatePath)
 		if err != nil {
@@ -493,7 +495,8 @@ func main() {
 
 		// 4c.1. progress monitoring scheduling if available - TODO
 		messages := make(chan string, 10)
-		go IntermediateMonitoring(messages, codeBaseDir, experimentManagers, simulation_index, config, simulationDirPath, client)
+		finished := make(chan struct{}, 1)
+		go IntermediateMonitoring(messages, finished, codeBaseDir, experimentManagers, simulation_index, config, simulationDirPath, client)
 
 		// 4c. run an executor of this simulation
 		fmt.Println("[SiM] Before executor ...")
@@ -630,7 +633,13 @@ func main() {
 		}
 
 		// 5. clean up - removing simulation dir
-		os.RemoveAll(simulationDirPath)
+		go func() {
+			select {
+			case _ = <-finished:
+				os.RemoveAll(simulationDirPath)
+				close(finished)
+			}
+		}()
 
 		// 6. going to the root dir and moving
 		if err = rootDir.Chdir(); err != nil {
