@@ -53,7 +53,7 @@ type RequestInfo struct {
 }
 
 func Fatal(err error) {
-	fmt.Println(err.Error())
+	fmt.Println("[Fatal error] %s\n" err.Error())
 	os.Exit(1)
 }
 
@@ -206,19 +206,19 @@ func IntermediateMonitoring(messages chan struct{}, finished chan struct{}, code
 
 			if _, err := os.Stat("intermediate_result.json"); os.IsNotExist(err) {
 				intermediateResults.Status = "error"
-				intermediateResults.Reason = "No 'intermediate_result.json' file found"
+				intermediateResults.Reason = fmt.Sprintf("No 'intermediate_result.json' file found: %s", err.Error())
 			} else {
 				file, err := os.Open("intermediate_result.json")
 
 				if err != nil {
 					intermediateResults.Status = "error"
-					intermediateResults.Reason = "Could not open 'intermediate_result.json'"
+					intermediateResults.Reason = fmt.Sprintf("Could not open 'intermediate_result.json': %s", err.Error())
 				} else {
 					err = json.NewDecoder(file).Decode(&intermediateResults)
 
 					if err != nil {
 						intermediateResults.Status = "error"
-						intermediateResults.Reason = "Error during 'intermediate_result.json' parsing"
+						intermediateResults.Reason = fmt.Sprintf("Error during 'intermediate_result.json' parsing: %s", err.Error())
 					}
 				}
 
@@ -336,8 +336,7 @@ func main() {
 	}
 
 	if len(experimentManagers) == 0 {
-		fmt.Println("[Fatal error] There is no Experiment Manager registered in Information Service. Please contact Scalarm administrators.")
-		os.Exit(1)
+		Fatal(fmt.Errorf("There is no Experiment Manager registered in Information Service. Please contact Scalarm administrators."))
 	}
 
 	// getting storage manager address
@@ -353,8 +352,7 @@ func main() {
 	}
 
 	if len(storageManagers) == 0 {
-		fmt.Println("[Fatal error] There is no Storage Manager registered in Information Service. Please contact Scalarm administrators.")
-		os.Exit(1)
+		Fatal(fmt.Errorf("There is no Storage Manager registered in Information Service. Please contact Scalarm administrators."))
 	}
 
 	// creating directory for experiment data
@@ -389,17 +387,20 @@ func main() {
 		if err = Extract(codeBaseDir+"/code_base.zip", codeBaseDir); err != nil {
 			fmt.Println("[SiM] An error occurred while unzipping 'code_base.zip'.")
 			fmt.Println("[Fatal error] occured while unzipping 'code_base.zip'.")
+			fmt.Printf("[Fatal error] %s\n", err.Error())
 			os.Exit(2)
 		}
 		if err = Extract(codeBaseDir+"/simulation_binaries.zip", codeBaseDir); err != nil {
 			fmt.Println("[SiM] An error occurred while unzipping 'simulation_binaries.zip'.")
 			fmt.Println("[Fatal error] occured while unzipping 'simulation_binaries.zip'.")
+			fmt.Printf("[Fatal error] %s\n", err.Error())
 			os.Exit(2)
 		}
 
 		if err = exec.Command("sh", "-c", fmt.Sprintf("chmod a+x \"%s\"/*", codeBaseDir)).Run(); err != nil {
 			fmt.Println("[SiM] An error occurred during executing 'chmod' command. Please check if you have required permissions.")
 			fmt.Printf("[Fatal error] occured during '%v' execution \n", fmt.Sprintf("chmod a+x \"%s\"/*", codeBaseDir))
+			fmt.Printf("[Fatal error] %s\n", err.Error())
 			os.Exit(2)
 		}
 	}
@@ -487,6 +488,7 @@ func main() {
 				fmt.Println("[SiM] An error occurred during 'input_writer' execution.")
 				fmt.Println("[SiM] Please check if 'input_writer' executes correctly on the selected infrastructure.")
 				fmt.Printf("[Fatal error] occured during '%v' execution \n", strings.Join(inputWriterCmd.Args, " "))
+				fmt.Printf("[Fatal error] %s\n", err.Error())
 				PrintStdoutLog()
 				os.Exit(1)
 			}
@@ -506,6 +508,7 @@ func main() {
 			fmt.Println("[SiM] An error occurred during 'executor' execution.")
 			fmt.Println("[SiM] Please check if 'executor' executes correctly on the selected infrastructure.")
 			fmt.Printf("[Fatal error] occured during '%v' execution \n", strings.Join(executorCmd.Args, " "))
+			fmt.Printf("[Fatal error] %s\n", err.Error())
 			PrintStdoutLog()
 			os.Exit(1)
 		}
@@ -523,6 +526,7 @@ func main() {
 				fmt.Println("[SiM] An error occurred during 'output_reader' execution.")
 				fmt.Println("[SiM] Please check if 'output_reader' executes correctly on the selected infrastructure.")
 				fmt.Printf("[Fatal error] occured during '%v' execution \n", strings.Join(outputReaderCmd.Args, " "))
+				fmt.Printf("[Fatal error] %s\n", err.Error())	
 				PrintStdoutLog()
 				os.Exit(1)
 			}
@@ -534,19 +538,19 @@ func main() {
 
 		if _, err := os.Stat("output.json"); os.IsNotExist(err) {
 			simulationRunResults.Status = "error"
-			simulationRunResults.Reason = "No output.json file found"
+			simulationRunResults.Reason = fmt.Sprintf("No output.json file found: %s", err.Error())
 		} else {
 			file, err = os.Open("output.json")
 
 			if err != nil {
 				simulationRunResults.Status = "error"
-				simulationRunResults.Reason = "Could not open output.json"
+				simulationRunResults.Reason = fmt.Sprintf("Could not open output.json: %s", err.Error())
 			} else {
 				err = json.NewDecoder(file).Decode(&simulationRunResults)
 
 				if err != nil {
 					simulationRunResults.Status = "error"
-					simulationRunResults.Reason = "Error during output.json parsing"
+					simulationRunResults.Reason = fmt.Sprintf("Error during output.json parsing: %s", err.Error())
 				}
 			}
 
