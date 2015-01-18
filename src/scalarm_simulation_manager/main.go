@@ -247,6 +247,7 @@ func IntermediateMonitoring(messages chan string, finished chan struct{}, codeBa
 				fmt.Printf("[SiM][progress_info] Our work is finished\n")
 				finished <- struct{}{}
 				return
+			default:
 			}
 		}
 	} else {
