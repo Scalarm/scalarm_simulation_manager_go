@@ -183,7 +183,9 @@ func GetWithTimeout(client *http.Client, request *http.Request, communicationTim
 }
 
 // this method executes progress monitor of a simulation run and stops when it gets a signal from the main thread
-func IntermediateMonitoring(messages chan string, finished chan struct{}, codeBaseDir string, experimentManagers []string, simIndex float64, config *SimulationManagerConfig, simulationDirPath string, client *http.Client) {
+func IntermediateMonitoring(messages chan struct{}, finished chan struct{}, codeBaseDir string, experimentManagers []string, simIndex float64,
+	config *SimulationManagerConfig, simulationDirPath string, client *http.Client) {
+
 	communicationTimeout := 30 * time.Second
 
 	if _, err := os.Stat(path.Join(codeBaseDir, "progress_monitor")); err == nil {
@@ -492,7 +494,7 @@ func main() {
 		}
 
 		// 4c.1. progress monitoring scheduling if available - TODO
-		messages := make(chan string, 10)
+		messages := make(chan struct{}, 1)
 		finished := make(chan struct{}, 1)
 		go IntermediateMonitoring(messages, finished, codeBaseDir, experimentManagers, simulation_index, config, simulationDirPath, client)
 
@@ -509,7 +511,7 @@ func main() {
 		}
 		fmt.Println("[SiM] After executor ...")
 
-		messages <- "done"
+		messages <- struct{}{}
 		close(messages)
 
 		// 4d. run an adapter script (output reader) to transform specific output format to scalarm model (output.json)
