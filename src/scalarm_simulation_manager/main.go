@@ -567,67 +567,65 @@ func main() {
 
 		fmt.Printf("[SiM] Response body: %s\n", body)
 
-		if len(storageManagers) > 0 {
-			// 4g. upload binary output if provided
-			if _, err := os.Stat("output.tar.gz"); err == nil {
-				fmt.Printf("[SiM] Uploading 'output.tar.gz' ...\n")
-				file, err := os.Open("output.tar.gz")
+		// 4g. upload binary output if provided
+		if _, err := os.Stat("output.tar.gz"); err == nil {
+			fmt.Printf("[SiM] Uploading 'output.tar.gz' ...\n")
+			file, err := os.Open("output.tar.gz")
 
-				if err != nil {
-					Fatal(err)
-				}
-
-				defer file.Close()
-
-				requestBody := &bytes.Buffer{}
-				writer := multipart.NewWriter(requestBody)
-				part, err := writer.CreateFormFile("file", filepath.Base("output.tar.gz"))
-				if err != nil {
-					Fatal(err)
-				}
-				_, err = io.Copy(part, file)
-
-				err = writer.Close()
-				if err != nil {
-					Fatal(err)
-				}
-
-				binariesUploadUrl := fmt.Sprintf("experiments/%s/simulations/%v", config.ExperimentId, simulation_index)
-				binariesUploadUrlInfo := RequestInfo{"PUT", requestBody, writer.FormDataContentType(), binariesUploadUrl}
-				body = ExecuteScalarmRequest(binariesUploadUrlInfo, storageManagers, config, client, communicationTimeout)
-
-				fmt.Printf("[SiM] Response body: %s\n", body)
+			if err != nil {
+				Fatal(err)
 			}
 
-			// 4h. upload stdout if provided
-			if _, err := os.Stat("_stdout.txt"); err == nil {
-				fmt.Println("[SiM] Uploading STDOUT of the simulation run ...")
+			defer file.Close()
 
-				file, err := os.Open("_stdout.txt")
-				if err != nil {
-					Fatal(err)
-				}
-
-				requestBody := &bytes.Buffer{}
-				writer := multipart.NewWriter(requestBody)
-				part, err := writer.CreateFormFile("file", filepath.Base("_stdout.txt"))
-				if err != nil {
-					Fatal(err)
-				}
-				_, err = io.Copy(part, file)
-				file.Close()
-
-				err = writer.Close()
-				if err != nil {
-					Fatal(err)
-				}
-
-				stdoutUploadUrl := fmt.Sprintf("experiments/%s/simulations/%v/stdout", config.ExperimentId, simulation_index)
-				stdoutUploadUrlInfo := RequestInfo{"PUT", requestBody, writer.FormDataContentType(), stdoutUploadUrl}
-				body = ExecuteScalarmRequest(stdoutUploadUrlInfo, storageManagers, config, client, communicationTimeout)
-
-				fmt.Printf("[SiM] Response body: %s\n", body)
+			requestBody := &bytes.Buffer{}
+			writer := multipart.NewWriter(requestBody)
+			part, err := writer.CreateFormFile("file", filepath.Base("output.tar.gz"))
+			if err != nil {
+				Fatal(err)
 			}
+			_, err = io.Copy(part, file)
+
+			err = writer.Close()
+			if err != nil {
+				Fatal(err)
+			}
+
+			binariesUploadUrl := fmt.Sprintf("experiments/%s/simulations/%v", config.ExperimentId, simulation_index)
+			binariesUploadUrlInfo := RequestInfo{"PUT", requestBody, writer.FormDataContentType(), binariesUploadUrl}
+			body = ExecuteScalarmRequest(binariesUploadUrlInfo, storageManagers, config, client, communicationTimeout)
+
+			fmt.Printf("[SiM] Response body: %s\n", body)
+		}
+
+		// 4h. upload stdout if provided
+		if _, err := os.Stat("_stdout.txt"); err == nil {
+			fmt.Println("[SiM] Uploading STDOUT of the simulation run ...")
+
+			file, err := os.Open("_stdout.txt")
+			if err != nil {
+				Fatal(err)
+			}
+
+			requestBody := &bytes.Buffer{}
+			writer := multipart.NewWriter(requestBody)
+			part, err := writer.CreateFormFile("file", filepath.Base("_stdout.txt"))
+			if err != nil {
+				Fatal(err)
+			}
+			_, err = io.Copy(part, file)
+			file.Close()
+
+			err = writer.Close()
+			if err != nil {
+				Fatal(err)
+			}
+
+			stdoutUploadUrl := fmt.Sprintf("experiments/%s/simulations/%v/stdout", config.ExperimentId, simulation_index)
+			stdoutUploadUrlInfo := RequestInfo{"PUT", requestBody, writer.FormDataContentType(), stdoutUploadUrl}
+			body = ExecuteScalarmRequest(stdoutUploadUrlInfo, storageManagers, config, client, communicationTimeout)
+
+			fmt.Printf("[SiM] Response body: %s\n", body)
 		}
 
 		// 5. clean up - removing simulation dir
