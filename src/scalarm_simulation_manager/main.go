@@ -53,7 +53,7 @@ type RequestInfo struct {
 }
 
 func Fatal(err error) {
-	fmt.Println(err.Error())
+	fmt.Println("[Fatal error] %s\n" err.Error())
 	os.Exit(1)
 }
 
@@ -183,7 +183,9 @@ func GetWithTimeout(client *http.Client, request *http.Request, communicationTim
 }
 
 // this method executes progress monitor of a simulation run and stops when it gets a signal from the main thread
-func IntermediateMonitoring(messages chan string, finished chan struct{}, codeBaseDir string, experimentManagers []string, simIndex float64, config *SimulationManagerConfig, simulationDirPath string, client *http.Client) {
+func IntermediateMonitoring(messages chan struct{}, finished chan struct{}, codeBaseDir string, experimentManagers []string, simIndex float64,
+	config *SimulationManagerConfig, simulationDirPath string, client *http.Client) {
+
 	communicationTimeout := 30 * time.Second
 
 	if _, err := os.Stat(path.Join(codeBaseDir, "progress_monitor")); err == nil {
@@ -204,19 +206,19 @@ func IntermediateMonitoring(messages chan string, finished chan struct{}, codeBa
 
 			if _, err := os.Stat("intermediate_result.json"); os.IsNotExist(err) {
 				intermediateResults.Status = "error"
-				intermediateResults.Reason = "No 'intermediate_result.json' file found"
+				intermediateResults.Reason = fmt.Sprintf("No 'intermediate_result.json' file found: %s", err.Error())
 			} else {
 				file, err := os.Open("intermediate_result.json")
 
 				if err != nil {
 					intermediateResults.Status = "error"
-					intermediateResults.Reason = "Could not open 'intermediate_result.json'"
+					intermediateResults.Reason = fmt.Sprintf("Could not open 'intermediate_result.json': %s", err.Error())
 				} else {
 					err = json.NewDecoder(file).Decode(&intermediateResults)
 
 					if err != nil {
 						intermediateResults.Status = "error"
-						intermediateResults.Reason = "Error during 'intermediate_result.json' parsing"
+						intermediateResults.Reason = fmt.Sprintf("Error during 'intermediate_result.json' parsing: %s", err.Error())
 					}
 				}
 
@@ -316,9 +318,7 @@ func main() {
 			fmt.Printf("[SiM] %v\n", err)
 		} else {
 			fmt.Println("[SiM] We have start_at provided")
-			for startTime.After(time.Now()) {
-				time.Sleep(1 * time.Second)
-			}
+			time.Sleep(startTime.Sub(time.Now()))
 			fmt.Println("[SiM] We are ready to work")
 		}
 	}
@@ -336,8 +336,7 @@ func main() {
 	}
 
 	if len(experimentManagers) == 0 {
-		fmt.Println("[Fatal error] There is no Experiment Manager registered in Information Service. Please contact Scalarm administrators.")
-		os.Exit(1)
+		Fatal(fmt.Errorf("There is no Experiment Manager registered in Information Service. Please contact Scalarm administrators."))
 	}
 
 	// getting storage manager address
@@ -353,8 +352,7 @@ func main() {
 	}
 
 	if len(storageManagers) == 0 {
-		fmt.Println("[Fatal error] There is no Storage Manager registered in Information Service. Please contact Scalarm administrators.")
-		os.Exit(1)
+		Fatal(fmt.Errorf("There is no Storage Manager registered in Information Service. Please contact Scalarm administrators."))
 	}
 
 	// creating directory for experiment data
@@ -389,17 +387,20 @@ func main() {
 		if err = Extract(codeBaseDir+"/code_base.zip", codeBaseDir); err != nil {
 			fmt.Println("[SiM] An error occurred while unzipping 'code_base.zip'.")
 			fmt.Println("[Fatal error] occured while unzipping 'code_base.zip'.")
+			fmt.Printf("[Fatal error] %s\n", err.Error())
 			os.Exit(2)
 		}
 		if err = Extract(codeBaseDir+"/simulation_binaries.zip", codeBaseDir); err != nil {
 			fmt.Println("[SiM] An error occurred while unzipping 'simulation_binaries.zip'.")
 			fmt.Println("[Fatal error] occured while unzipping 'simulation_binaries.zip'.")
+			fmt.Printf("[Fatal error] %s\n", err.Error())
 			os.Exit(2)
 		}
 
 		if err = exec.Command("sh", "-c", fmt.Sprintf("chmod a+x \"%s\"/*", codeBaseDir)).Run(); err != nil {
 			fmt.Println("[SiM] An error occurred during executing 'chmod' command. Please check if you have required permissions.")
 			fmt.Printf("[Fatal error] occured during '%v' execution \n", fmt.Sprintf("chmod a+x \"%s\"/*", codeBaseDir))
+			fmt.Printf("[Fatal error] %s\n", err.Error())
 			os.Exit(2)
 		}
 	}
@@ -487,6 +488,7 @@ func main() {
 				fmt.Println("[SiM] An error occurred during 'input_writer' execution.")
 				fmt.Println("[SiM] Please check if 'input_writer' executes correctly on the selected infrastructure.")
 				fmt.Printf("[Fatal error] occured during '%v' execution \n", strings.Join(inputWriterCmd.Args, " "))
+				fmt.Printf("[Fatal error] %s\n", err.Error())
 				PrintStdoutLog()
 				os.Exit(1)
 			}
@@ -494,7 +496,7 @@ func main() {
 		}
 
 		// 4c.1. progress monitoring scheduling if available - TODO
-		messages := make(chan string, 10)
+		messages := make(chan struct{}, 1)
 		finished := make(chan struct{}, 1)
 		go IntermediateMonitoring(messages, finished, codeBaseDir, experimentManagers, simulation_index, config, simulationDirPath, client)
 
@@ -506,12 +508,13 @@ func main() {
 			fmt.Println("[SiM] An error occurred during 'executor' execution.")
 			fmt.Println("[SiM] Please check if 'executor' executes correctly on the selected infrastructure.")
 			fmt.Printf("[Fatal error] occured during '%v' execution \n", strings.Join(executorCmd.Args, " "))
+			fmt.Printf("[Fatal error] %s\n", err.Error())
 			PrintStdoutLog()
 			os.Exit(1)
 		}
 		fmt.Println("[SiM] After executor ...")
 
-		messages <- "done"
+		messages <- struct{}{}
 		close(messages)
 
 		// 4d. run an adapter script (output reader) to transform specific output format to scalarm model (output.json)
@@ -523,6 +526,7 @@ func main() {
 				fmt.Println("[SiM] An error occurred during 'output_reader' execution.")
 				fmt.Println("[SiM] Please check if 'output_reader' executes correctly on the selected infrastructure.")
 				fmt.Printf("[Fatal error] occured during '%v' execution \n", strings.Join(outputReaderCmd.Args, " "))
+				fmt.Printf("[Fatal error] %s\n", err.Error())	
 				PrintStdoutLog()
 				os.Exit(1)
 			}
@@ -534,19 +538,19 @@ func main() {
 
 		if _, err := os.Stat("output.json"); os.IsNotExist(err) {
 			simulationRunResults.Status = "error"
-			simulationRunResults.Reason = "No output.json file found"
+			simulationRunResults.Reason = fmt.Sprintf("No output.json file found: %s", err.Error())
 		} else {
 			file, err = os.Open("output.json")
 
 			if err != nil {
 				simulationRunResults.Status = "error"
-				simulationRunResults.Reason = "Could not open output.json"
+				simulationRunResults.Reason = fmt.Sprintf("Could not open output.json: %s", err.Error())
 			} else {
 				err = json.NewDecoder(file).Decode(&simulationRunResults)
 
 				if err != nil {
 					simulationRunResults.Status = "error"
-					simulationRunResults.Reason = "Error during output.json parsing"
+					simulationRunResults.Reason = fmt.Sprintf("Error during output.json parsing: %s", err.Error())
 				}
 			}
 
@@ -569,67 +573,65 @@ func main() {
 
 		fmt.Printf("[SiM] Response body: %s\n", body)
 
-		if len(storageManagers) > 0 {
-			// 4g. upload binary output if provided
-			if _, err := os.Stat("output.tar.gz"); err == nil {
-				fmt.Printf("[SiM] Uploading 'output.tar.gz' ...\n")
-				file, err := os.Open("output.tar.gz")
+		// 4g. upload binary output if provided
+		if _, err := os.Stat("output.tar.gz"); err == nil {
+			fmt.Printf("[SiM] Uploading 'output.tar.gz' ...\n")
+			file, err := os.Open("output.tar.gz")
 
-				if err != nil {
-					Fatal(err)
-				}
-
-				defer file.Close()
-
-				requestBody := &bytes.Buffer{}
-				writer := multipart.NewWriter(requestBody)
-				part, err := writer.CreateFormFile("file", filepath.Base("output.tar.gz"))
-				if err != nil {
-					Fatal(err)
-				}
-				_, err = io.Copy(part, file)
-
-				err = writer.Close()
-				if err != nil {
-					Fatal(err)
-				}
-
-				binariesUploadUrl := fmt.Sprintf("experiments/%s/simulations/%v", config.ExperimentId, simulation_index)
-				binariesUploadUrlInfo := RequestInfo{"PUT", requestBody, writer.FormDataContentType(), binariesUploadUrl}
-				body = ExecuteScalarmRequest(binariesUploadUrlInfo, storageManagers, config, client, communicationTimeout)
-
-				fmt.Printf("[SiM] Response body: %s\n", body)
+			if err != nil {
+				Fatal(err)
 			}
 
-			// 4h. upload stdout if provided
-			if _, err := os.Stat("_stdout.txt"); err == nil {
-				fmt.Println("[SiM] Uploading STDOUT of the simulation run ...")
+			defer file.Close()
 
-				file, err := os.Open("_stdout.txt")
-				if err != nil {
-					Fatal(err)
-				}
-
-				requestBody := &bytes.Buffer{}
-				writer := multipart.NewWriter(requestBody)
-				part, err := writer.CreateFormFile("file", filepath.Base("_stdout.txt"))
-				if err != nil {
-					Fatal(err)
-				}
-				_, err = io.Copy(part, file)
-				file.Close()
-
-				err = writer.Close()
-				if err != nil {
-					Fatal(err)
-				}
-
-				stdoutUploadUrl := fmt.Sprintf("experiments/%s/simulations/%v/stdout", config.ExperimentId, simulation_index)
-				stdoutUploadUrlInfo := RequestInfo{"PUT", requestBody, writer.FormDataContentType(), stdoutUploadUrl}
-				body = ExecuteScalarmRequest(stdoutUploadUrlInfo, storageManagers, config, client, communicationTimeout)
-
-				fmt.Printf("[SiM] Response body: %s\n", body)
+			requestBody := &bytes.Buffer{}
+			writer := multipart.NewWriter(requestBody)
+			part, err := writer.CreateFormFile("file", filepath.Base("output.tar.gz"))
+			if err != nil {
+				Fatal(err)
 			}
+			_, err = io.Copy(part, file)
+
+			err = writer.Close()
+			if err != nil {
+				Fatal(err)
+			}
+
+			binariesUploadUrl := fmt.Sprintf("experiments/%s/simulations/%v", config.ExperimentId, simulation_index)
+			binariesUploadUrlInfo := RequestInfo{"PUT", requestBody, writer.FormDataContentType(), binariesUploadUrl}
+			body = ExecuteScalarmRequest(binariesUploadUrlInfo, storageManagers, config, client, communicationTimeout)
+
+			fmt.Printf("[SiM] Response body: %s\n", body)
+		}
+
+		// 4h. upload stdout if provided
+		if _, err := os.Stat("_stdout.txt"); err == nil {
+			fmt.Println("[SiM] Uploading STDOUT of the simulation run ...")
+
+			file, err := os.Open("_stdout.txt")
+			if err != nil {
+				Fatal(err)
+			}
+
+			requestBody := &bytes.Buffer{}
+			writer := multipart.NewWriter(requestBody)
+			part, err := writer.CreateFormFile("file", filepath.Base("_stdout.txt"))
+			if err != nil {
+				Fatal(err)
+			}
+			_, err = io.Copy(part, file)
+			file.Close()
+
+			err = writer.Close()
+			if err != nil {
+				Fatal(err)
+			}
+
+			stdoutUploadUrl := fmt.Sprintf("experiments/%s/simulations/%v/stdout", config.ExperimentId, simulation_index)
+			stdoutUploadUrlInfo := RequestInfo{"PUT", requestBody, writer.FormDataContentType(), stdoutUploadUrl}
+			body = ExecuteScalarmRequest(stdoutUploadUrlInfo, storageManagers, config, client, communicationTimeout)
+
+			fmt.Printf("[SiM] Response body: %s\n", body)
 		}
 
 		// 5. clean up - removing simulation dir
