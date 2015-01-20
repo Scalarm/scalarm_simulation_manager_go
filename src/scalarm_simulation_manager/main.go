@@ -53,7 +53,7 @@ type RequestInfo struct {
 }
 
 func Fatal(err error) {
-	fmt.Println("[Fatal error] %s\n" err.Error())
+	fmt.Println("[Fatal error] %s\n", err.Error())
 	os.Exit(1)
 }
 
