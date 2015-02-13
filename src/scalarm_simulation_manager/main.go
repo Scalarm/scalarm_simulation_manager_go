@@ -27,15 +27,15 @@ import (
 
 // Config file description - this should be provided by Experiment Manager in 'config.json'
 type SimulationManagerConfig struct {
-	ExperimentId          string `json:"experiment_id"`
-	InformationServiceUrl string `json:"information_service_url"`
-	ExperimentManagerUser string `json:"experiment_manager_user"`
-	ExperimentManagerPass string `json:"experiment_manager_pass"`
-	Development           bool   `json:"development"`
-	StartAt               string `json:"start_at"`
-	Timeout               int    `json:"timeout"`
+	ExperimentId           string `json:"experiment_id"`
+	InformationServiceUrl  string `json:"information_service_url"`
+	ExperimentManagerUser  string `json:"experiment_manager_user"`
+	ExperimentManagerPass  string `json:"experiment_manager_pass"`
+	Development            bool   `json:"development"`
+	StartAt                string `json:"start_at"`
+	Timeout                int    `json:"timeout"`
 	ScalarmCertificatePath string `json:"scalarm_certificate_path"`
-	InsecureSSL           bool   `json:"insecure_ssl"`
+	InsecureSSL            bool   `json:"insecure_ssl"`
 }
 
 // Results structure - we send this back to Experiment Manager
@@ -293,7 +293,7 @@ func main() {
 	var client *http.Client
 	tlsConfig := tls.Config{InsecureSkipVerify: config.InsecureSSL}
 
-	if (config.ScalarmCertificatePath != "") {
+	if config.ScalarmCertificatePath != "" {
 		CA_Pool := x509.NewCertPool()
 		severCert, err := ioutil.ReadFile(config.ScalarmCertificatePath)
 		if err != nil {
@@ -409,6 +409,7 @@ func main() {
 
 		var nextSimulationBody []byte
 		var simulation_run map[string]interface{}
+		wait := false
 
 		// 4.a getting input values for next simulation run
 		for communicationStart.Add(communicationTimeout * time.Duration(len(experimentManagers))).After(time.Now()) {
@@ -428,6 +429,11 @@ func main() {
 					fmt.Println("[SiM] There is no more simulations to run in this experiment.")
 				} else if status == "error" {
 					fmt.Println("[SiM] An error occurred while getting next simulation.")
+				} else if status == "wait" {
+					fmt.Printf("[SiM] There is no more simulations to run in this experiment "+
+						"at the moment, time to wait: %vs\n", simulation_run["duration_in_seconds"])
+					wait = true
+					break
 				} else if status != "ok" {
 					fmt.Println("[SiM] We cannot continue due to unsupported status.")
 				} else {
@@ -438,6 +444,10 @@ func main() {
 
 			fmt.Println("[SiM] There was a problem while getting next simulation to run.")
 			time.Sleep(5 * time.Second)
+		}
+		if wait {
+			time.Sleep(time.Duration(simulation_run["duration_in_seconds"].(float64)) * time.Second)
+			continue
 		}
 
 		if nextSimulationFailed {
