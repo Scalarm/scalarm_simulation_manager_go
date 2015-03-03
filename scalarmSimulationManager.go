@@ -46,7 +46,7 @@ type SimulationRunResults struct {
 }
 
 func (res *SimulationRunResults) isValid() bool {
-	return !(res.Status == "ok" && res.Results != nil) && !(res.Status == "error" && res.Reason != "")
+	return (res.Status == "ok" && res.Results != nil) || (res.Status == "error" && res.Reason != "")
 }
 
 type RequestInfo struct {
@@ -578,7 +578,7 @@ func main() {
 
 		resultJson, _ := json.Marshal(simulationRunResults.Results)
 
-		if simulationRunResults.isValid() || !isJSON(string(resultJson)) {
+		if !simulationRunResults.isValid() || !isJSON(string(resultJson)) {
 			fmt.Printf("[output.json] Invalid results.json: %s\n", resultJson)
 			simulationRunResults.Status = "error"
 			simulationRunResults.Results = nil
