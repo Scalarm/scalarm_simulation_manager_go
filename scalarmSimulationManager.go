@@ -536,7 +536,7 @@ func main() {
 				fmt.Println("[SiM] An error occurred during 'output_reader' execution.")
 				fmt.Println("[SiM] Please check if 'output_reader' executes correctly on the selected infrastructure.")
 				fmt.Printf("[Fatal error] occured during '%v' execution \n", strings.Join(outputReaderCmd.Args, " "))
-				fmt.Printf("[Fatal error] %s\n", err.Error())	
+				fmt.Printf("[Fatal error] %s\n", err.Error())
 				PrintStdoutLog()
 				os.Exit(1)
 			}
@@ -565,6 +565,10 @@ func main() {
 			}
 
 			file.Close()
+		}
+
+		if simulationRunResults.Status == "" || (simulationRunResults.Results == nil && simulationRunResults.Reason == "") {
+			fmt.Printf("[output.json] Missing data in result: %+v\n", simulationRunResults)
 		}
 
 		// 4f. upload structural results of a simulation run
