@@ -46,7 +46,7 @@ type SimulationRunResults struct {
 }
 
 type ExecutionStatistics struct {
-	executionTime time.Duration
+	TimeInSeconds float64 `json:"time_in_seconds"`
 }
 
 func (res *SimulationRunResults) isValid() bool {
@@ -538,8 +538,10 @@ func main() {
 			PrintStdoutLog()
 			os.Exit(1)
 		}
-		executionStatistics.executionTime = time.Since(start)
+		executionDuration := time.Since(start)
 		fmt.Println("[SiM] After executor ...")
+		fmt.Printf("[Sim] Execution took %v\n", executionDuration.String())
+		executionStatistics.TimeInSeconds = executionDuration.Seconds()
 
 		messages <- struct{}{}
 		close(messages)
@@ -604,7 +606,7 @@ func main() {
 			Fatal(err)
 		}
 
-		data.Add("execution_statisctics", string(parsedStatistics))
+		data.Add("execution_statistics", string(parsedStatistics))
 		data.Add("result", string(resultJson))
 
 		fmt.Printf("[SiM] Results: %v\n", data)
