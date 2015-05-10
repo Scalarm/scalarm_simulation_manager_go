@@ -45,6 +45,10 @@ type SimulationRunResults struct {
 	Reason  string      `json:"reason"`
 }
 
+type ExecutionStatistics struct {
+	executionTime time.Duration
+}
+
 func (res *SimulationRunResults) isValid() bool {
 	return (res.Status == "ok" && res.Results != nil) || (res.Status == "error" && res.Reason != "")
 }
@@ -416,6 +420,8 @@ func main() {
 
 	// 4. main loop for getting simulation runs of an experiment
 	for {
+		executionStatistics := ExecutionStatistics{}
+
 		nextSimulationFailed := true
 		communicationStart := time.Now()
 
@@ -523,6 +529,7 @@ func main() {
 		fmt.Println("[SiM] Before executor ...")
 		executorCmd := exec.Command("sh", "-c", path.Join(codeBaseDir, "executor >>_stdout.txt 2>&1"))
 		executorCmd.Dir = simulationDirPath
+		start := time.Now()
 		if err = executorCmd.Run(); err != nil {
 			fmt.Println("[SiM] An error occurred during 'executor' execution.")
 			fmt.Println("[SiM] Please check if 'executor' executes correctly on the selected infrastructure.")
@@ -531,6 +538,7 @@ func main() {
 			PrintStdoutLog()
 			os.Exit(1)
 		}
+		executionStatistics.executionTime = time.Since(start)
 		fmt.Println("[SiM] After executor ...")
 
 		messages <- struct{}{}
@@ -590,6 +598,13 @@ func main() {
 		data := url.Values{}
 		data.Set("status", simulationRunResults.Status)
 		data.Add("reason", simulationRunResults.Reason)
+
+		parsedStatistics, err := json.Marshal(executionStatistics)
+		if err != nil {
+			Fatal(err)
+		}
+
+		data.Add("execution_statisctics", string(parsedStatistics))
 		data.Add("result", string(resultJson))
 
 		fmt.Printf("[SiM] Results: %v\n", data)
