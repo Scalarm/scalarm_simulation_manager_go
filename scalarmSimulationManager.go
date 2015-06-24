@@ -191,7 +191,7 @@ func GetWithTimeout(client *http.Client, request *http.Request, communicationTim
 
 // this method executes progress monitor of a simulation run and stops when it gets a signal from the main thread
 func IntermediateMonitoring(messages chan struct{}, finished chan struct{}, codeBaseDir string, experimentManagers []string, simIndex float64,
-	config *SimulationManagerConfig, simulationDirPath string, client *http.Client) {
+	config *SimulationManagerConfig, simulationDirPath string, client *http.Client, experimentId string) {
 
 	communicationTimeout := 30 * time.Second
 
@@ -243,7 +243,7 @@ func IntermediateMonitoring(messages chan struct{}, finished chan struct{}, code
 
 				progressInfo := RequestInfo{"POST", strings.NewReader(data.Encode()),
 					"application/x-www-form-urlencoded",
-					fmt.Sprintf("experiments/%v/simulations/%v/progress_info", config.ExperimentId, simIndex)}
+					fmt.Sprintf("experiments/%v/simulations/%v/progress_info", experimentId, simIndex)}
 
 				body := ExecuteScalarmRequest(progressInfo, experimentManagers, config, client, communicationTimeout)
 
@@ -579,7 +579,7 @@ func main() {
 			// 4c.1. progress monitoring scheduling if available - TODO
 			messages := make(chan struct{}, 1)
 			finished := make(chan struct{}, 1)
-			go IntermediateMonitoring(messages, finished, codeBaseDir, experimentManagers, simulation_index, config, simulationDirPath, client)
+			go IntermediateMonitoring(messages, finished, codeBaseDir, experimentManagers, simulation_index, config, simulationDirPath, client, experimentId)
 
 			// 4c. run an executor of this simulation
 			fmt.Println("[SiM] Before executor ...")
