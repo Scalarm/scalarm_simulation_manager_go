@@ -25,6 +25,8 @@ import (
 	"time"
 )
 
+const VERSION string = "15.04.0"
+
 // Config file description - this should be provided by Experiment Manager in 'config.json'
 type SimulationManagerConfig struct {
 	ExperimentId           string `json:"experiment_id"`
@@ -268,6 +270,8 @@ func isJSON(s string) bool {
 }
 
 func main() {
+	fmt.Printf("[SiM] Scalarm Simulation Manager, version: %s\n", VERSION)
+    
 	var file *os.File
 	var experimentDir string
 
