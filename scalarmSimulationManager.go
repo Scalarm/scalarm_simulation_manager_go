@@ -23,9 +23,10 @@ import (
 	"math/rand"
 	"strings"
 	"time"
+	"container/list"
 )
 
-const VERSION string = "15.04.0"
+const VERSION string = "15.06.0-random-experiments"
 
 // Config file description - this should be provided by Experiment Manager in 'config.json'
 type SimulationManagerConfig struct {
@@ -269,6 +270,26 @@ func isJSON(s string) bool {
 	return json.Unmarshal([]byte(s), &js) == nil
 }
 
+// Makes request to experiments/random_experiment
+// Returns String: random experiment id available for current user
+func GetRandomExperimentId(config *SimulationManagerConfig, experimentManagers []string, client *http.Client) string {
+	communicationTimeout := 30 * time.Second
+	fmt.Printf("[SiM] Getting random experiment id...\n")
+	getExpReqInfo := RequestInfo{"GET", nil, "", "experiments/random_experiment"}
+	body := ExecuteScalarmRequest(getExpReqInfo, experimentManagers, config, client, communicationTimeout)
+	fmt.Printf("[SiM] Random experiment response body: %s\n", body)
+	return fmt.Sprintf("%s", body)
+}
+
+func listIncludeString(l *list.List, a string) bool {
+	for e := l.Front(); e != nil; e = e.Next() {
+		if e.Value == a {
+			return true
+		}
+	}
+	return false
+}
+
 func main() {
 	fmt.Printf("[SiM] Scalarm Simulation Manager, version: %s\n", VERSION)
     
@@ -367,317 +388,355 @@ func main() {
 	if len(storageManagers) == 0 {
 		Fatal(fmt.Errorf("There is no Storage Manager registered in Information Service. Please contact Scalarm administrators."))
 	}
-
-	// creating directory for experiment data
-	experimentDir = path.Join(rootDirPath, fmt.Sprintf("experiment_%s", config.ExperimentId))
-
-	if err = os.MkdirAll(experimentDir, 0777); err != nil {
-		Fatal(err)
-	}
-
-	// 3. get code base for the experiment if necessary
-	codeBaseDir := path.Join(experimentDir, "code_base")
-
-	if _, err := os.Stat(codeBaseDir); os.IsNotExist(err) {
-		if err = os.MkdirAll(codeBaseDir, 0777); err != nil {
-			Fatal(err)
-		}
-		fmt.Println("[SiM] Getting code base ...")
-		codeBaseUrl := fmt.Sprintf("experiments/%s/code_base", config.ExperimentId)
-		codeBaseInfo := RequestInfo{"GET", nil, "", codeBaseUrl}
-		body = ExecuteScalarmRequest(codeBaseInfo, experimentManagers, config, client, communicationTimeout)
-
-		w, err := os.Create(path.Join(codeBaseDir, "code_base.zip"))
-		if err != nil {
-			Fatal(err)
-		}
-		defer w.Close()
-
-		if _, err = io.Copy(w, bytes.NewReader(body)); err != nil {
-			Fatal(err)
-		}
-
-		if err = Extract(codeBaseDir+"/code_base.zip", codeBaseDir); err != nil {
-			fmt.Println("[SiM] An error occurred while unzipping 'code_base.zip'.")
-			fmt.Println("[Fatal error] occured while unzipping 'code_base.zip'.")
-			fmt.Printf("[Fatal error] %s\n", err.Error())
-			os.Exit(2)
-		}
-		if err = Extract(codeBaseDir+"/simulation_binaries.zip", codeBaseDir); err != nil {
-			fmt.Println("[SiM] An error occurred while unzipping 'simulation_binaries.zip'.")
-			fmt.Println("[Fatal error] occured while unzipping 'simulation_binaries.zip'.")
-			fmt.Printf("[Fatal error] %s\n", err.Error())
-			os.Exit(2)
-		}
-
-		if err = exec.Command("sh", "-c", fmt.Sprintf("chmod a+x \"%s\"/*", codeBaseDir)).Run(); err != nil {
-			fmt.Println("[SiM] An error occurred during executing 'chmod' command. Please check if you have required permissions.")
-			fmt.Printf("[Fatal error] occured during '%v' execution \n", fmt.Sprintf("chmod a+x \"%s\"/*", codeBaseDir))
-			fmt.Printf("[Fatal error] %s\n", err.Error())
-			os.Exit(2)
-		}
-	}
-
-	// 4. main loop for getting simulation runs of an experiment
+	
+	var experimentId string
+	executedExperiments := list.New()
+	singleExperiment := false
+	// a great loop for multiple experiments
 	for {
-		nextSimulationFailed := true
-		communicationStart := time.Now()
-
-		var nextSimulationBody []byte
-		var simulation_run map[string]interface{}
-		wait := false
-
-		// 4.a getting input values for next simulation run
-		for communicationStart.Add(communicationTimeout * time.Duration(len(experimentManagers))).After(time.Now()) {
-			fmt.Println("[SiM] Getting next simulation run ...")
-			nextSimulationUrl := fmt.Sprintf("experiments/%s/next_simulation", config.ExperimentId)
-			nextSimulationInfo := RequestInfo{"GET", nil, "", nextSimulationUrl}
-			nextSimulationBody = ExecuteScalarmRequest(nextSimulationInfo, experimentManagers, config, client, communicationTimeout)
-
-			fmt.Printf("[SiM] Next simulation: %s\n", nextSimulationBody)
-
-			if err = json.Unmarshal(nextSimulationBody, &simulation_run); err != nil {
-				fmt.Printf("[SiM] %v\n", err)
-			} else {
-				status := simulation_run["status"].(string)
-
-				if status == "all_sent" {
-					fmt.Println("[SiM] There is no more simulations to run in this experiment.")
-				} else if status == "error" {
-					fmt.Println("[SiM] An error occurred while getting next simulation.")
-				} else if status == "wait" {
-					fmt.Printf("[SiM] There is no more simulations to run in this experiment "+
-						"at the moment, time to wait: %vs\n", simulation_run["duration_in_seconds"])
-					wait = true
-					break
-				} else if status != "ok" {
-					fmt.Println("[SiM] We cannot continue due to unsupported status.")
+		// get experiment_id from EM if not present in SiM config
+		if config.ExperimentId == "" {
+			experimentId = ""
+			for experimentId == "" {
+				experimentId = GetRandomExperimentId(config, experimentManagers, client);
+				
+				if experimentId == "" {
+					fmt.Printf("[SiM] Random experiment id empty, waiting 30 seconds to try again\n")
+					time.Sleep(30 * time.Second)
+					
+				// check if this experiment was executed by this SiM
+				} else if listIncludeString(executedExperiments, experimentId) {
+					fmt.Printf("[SiM] That experiment was already executed, waiting 10 seconds to get other id\n")
+					experimentId = ""
+					time.Sleep(10 * time.Second)
+					
+				// its new experiment - add it to executed list
 				} else {
-					nextSimulationFailed = false
+					executedExperiments.PushBack(experimentId)
+				}
+			}
+		} else {
+			experimentId = config.ExperimentId
+			singleExperiment = true
+		}
+		
+		// creating directory for experiment data
+		experimentDir = path.Join(rootDirPath, fmt.Sprintf("experiment_%s", experimentId))
+
+		if err = os.MkdirAll(experimentDir, 0777); err != nil {
+			Fatal(err)
+		}
+
+		// 3. get code base for the experiment if necessary
+		codeBaseDir := path.Join(experimentDir, "code_base")
+
+		if _, err := os.Stat(codeBaseDir); os.IsNotExist(err) {
+			if err = os.MkdirAll(codeBaseDir, 0777); err != nil {
+				Fatal(err)
+			}
+			fmt.Println("[SiM] Getting code base ...")
+			codeBaseUrl := fmt.Sprintf("experiments/%s/code_base", experimentId)
+			codeBaseInfo := RequestInfo{"GET", nil, "", codeBaseUrl}
+			body = ExecuteScalarmRequest(codeBaseInfo, experimentManagers, config, client, communicationTimeout)
+
+			w, err := os.Create(path.Join(codeBaseDir, "code_base.zip"))
+			if err != nil {
+				Fatal(err)
+			}
+			defer w.Close()
+
+			if _, err = io.Copy(w, bytes.NewReader(body)); err != nil {
+				Fatal(err)
+			}
+
+			if err = Extract(codeBaseDir+"/code_base.zip", codeBaseDir); err != nil {
+				fmt.Println("[SiM] An error occurred while unzipping 'code_base.zip'.")
+				fmt.Println("[Fatal error] occured while unzipping 'code_base.zip'.")
+				fmt.Printf("[Fatal error] %s\n", err.Error())
+				os.Exit(2)
+			}
+			if err = Extract(codeBaseDir+"/simulation_binaries.zip", codeBaseDir); err != nil {
+				fmt.Println("[SiM] An error occurred while unzipping 'simulation_binaries.zip'.")
+				fmt.Println("[Fatal error] occured while unzipping 'simulation_binaries.zip'.")
+				fmt.Printf("[Fatal error] %s\n", err.Error())
+				os.Exit(2)
+			}
+
+			if err = exec.Command("sh", "-c", fmt.Sprintf("chmod a+x \"%s\"/*", codeBaseDir)).Run(); err != nil {
+				fmt.Println("[SiM] An error occurred during executing 'chmod' command. Please check if you have required permissions.")
+				fmt.Printf("[Fatal error] occured during '%v' execution \n", fmt.Sprintf("chmod a+x \"%s\"/*", codeBaseDir))
+				fmt.Printf("[Fatal error] %s\n", err.Error())
+				os.Exit(2)
+			}
+		}
+
+		// 4. main loop for getting simulation runs of an experiment
+		for {
+			nextSimulationFailed := true
+			communicationStart := time.Now()
+
+			var nextSimulationBody []byte
+			var simulation_run map[string]interface{}
+			wait := false
+
+			// 4.a getting input values for next simulation run
+			for communicationStart.Add(communicationTimeout * time.Duration(len(experimentManagers))).After(time.Now()) {
+				fmt.Println("[SiM] Getting next simulation run ...")
+				nextSimulationUrl := fmt.Sprintf("experiments/%s/next_simulation", experimentId)
+				nextSimulationInfo := RequestInfo{"GET", nil, "", nextSimulationUrl}
+				nextSimulationBody = ExecuteScalarmRequest(nextSimulationInfo, experimentManagers, config, client, communicationTimeout)
+
+				fmt.Printf("[SiM] Next simulation: %s\n", nextSimulationBody)
+
+				if err = json.Unmarshal(nextSimulationBody, &simulation_run); err != nil {
+					fmt.Printf("[SiM] %v\n", err)
+				} else {
+					status := simulation_run["status"].(string)
+
+					if status == "all_sent" {
+						fmt.Println("[SiM] There is no more simulations to run in this experiment.")
+					} else if status == "error" {
+						fmt.Println("[SiM] An error occurred while getting next simulation.")
+					} else if status == "wait" {
+						fmt.Printf("[SiM] There is no more simulations to run in this experiment "+
+							"at the moment, time to wait: %vs\n", simulation_run["duration_in_seconds"])
+						wait = true
+						break
+					} else if status != "ok" {
+						fmt.Println("[SiM] We cannot continue due to unsupported status.")
+					} else {
+						nextSimulationFailed = false
+						break
+					}
+				}
+
+				fmt.Println("[SiM] There was a problem while getting next simulation to run.")
+				time.Sleep(5 * time.Second)
+			}
+			if wait {
+				time.Sleep(time.Duration(simulation_run["duration_in_seconds"].(float64)) * time.Second)
+				continue
+			}
+
+			if nextSimulationFailed {
+				fmt.Println("[SiM] Couldn't get simulation to run")
+				if singleExperiment {
+					fmt.Println("[SiM] that was single experiment run -> finishing work.")
+					os.Exit(0)
+				} else {
+					fmt.Println("[SiM] will try another experiment")
 					break
 				}
 			}
 
-			fmt.Println("[SiM] There was a problem while getting next simulation to run.")
-			time.Sleep(5 * time.Second)
-		}
-		if wait {
-			time.Sleep(time.Duration(simulation_run["duration_in_seconds"].(float64)) * time.Second)
-			continue
-		}
+			simulation_index := simulation_run["simulation_id"].(float64)
 
-		if nextSimulationFailed {
-			fmt.Println("[SiM] Couldn't get simulation to run -> finishing work.")
-			os.Exit(0)
-		}
+			fmt.Printf("[SiM] Simulation index: %v\n", simulation_index)
+			fmt.Printf("[SiM] Simulation execution constraints: %v\n", simulation_run["execution_constraints"])
 
-		simulation_index := simulation_run["simulation_id"].(float64)
+			simulationDirPath := path.Join(experimentDir, fmt.Sprintf("simulation_%v", simulation_index))
 
-		fmt.Printf("[SiM] Simulation index: %v\n", simulation_index)
-		fmt.Printf("[SiM] Simulation execution constraints: %v\n", simulation_run["execution_constraints"])
-
-		simulationDirPath := path.Join(experimentDir, fmt.Sprintf("simulation_%v", simulation_index))
-
-		err = os.MkdirAll(simulationDirPath, 0777)
-		if err != nil {
-			Fatal(err)
-		}
-
-		input_parameters, _ := json.Marshal(simulation_run["input_parameters"].(map[string]interface{}))
-
-		err = ioutil.WriteFile(path.Join(simulationDirPath, "input.json"), input_parameters, 0777)
-		if err != nil {
-			Fatal(err)
-		}
-
-		simulationDir, err := os.Open(simulationDirPath)
-		if err != nil {
-			Fatal(err)
-		}
-
-		wd, err := os.Getwd()
-		fmt.Printf("[SiM] Working dir: %v\n", wd)
-		if err = simulationDir.Chdir(); err != nil {
-			Fatal(err)
-		}
-		wd, err = os.Getwd()
-
-		// 4b. run an adapter script (input writer) for input information: input.json -> some specific code
-		if _, err := os.Stat(path.Join(codeBaseDir, "input_writer")); err == nil {
-			fmt.Println("[SiM] Before input writer ...")
-			inputWriterCmd := exec.Command("sh", "-c", path.Join(codeBaseDir, "input_writer input.json >>_stdout.txt 2>&1"))
-			inputWriterCmd.Dir = simulationDirPath
-			if err = inputWriterCmd.Run(); err != nil {
-				fmt.Println("[SiM] An error occurred during 'input_writer' execution.")
-				fmt.Println("[SiM] Please check if 'input_writer' executes correctly on the selected infrastructure.")
-				fmt.Printf("[Fatal error] occured during '%v' execution \n", strings.Join(inputWriterCmd.Args, " "))
-				fmt.Printf("[Fatal error] %s\n", err.Error())
-				PrintStdoutLog()
-				os.Exit(1)
-			}
-			fmt.Println("[SiM] After input writer ...")
-		}
-
-		// 4c.1. progress monitoring scheduling if available - TODO
-		messages := make(chan struct{}, 1)
-		finished := make(chan struct{}, 1)
-		go IntermediateMonitoring(messages, finished, codeBaseDir, experimentManagers, simulation_index, config, simulationDirPath, client)
-
-		// 4c. run an executor of this simulation
-		fmt.Println("[SiM] Before executor ...")
-		executorCmd := exec.Command("sh", "-c", path.Join(codeBaseDir, "executor >>_stdout.txt 2>&1"))
-		executorCmd.Dir = simulationDirPath
-		if err = executorCmd.Run(); err != nil {
-			fmt.Println("[SiM] An error occurred during 'executor' execution.")
-			fmt.Println("[SiM] Please check if 'executor' executes correctly on the selected infrastructure.")
-			fmt.Printf("[Fatal error] occured during '%v' execution \n", strings.Join(executorCmd.Args, " "))
-			fmt.Printf("[Fatal error] %s\n", err.Error())
-			PrintStdoutLog()
-			os.Exit(1)
-		}
-		fmt.Println("[SiM] After executor ...")
-
-		messages <- struct{}{}
-		close(messages)
-
-		// 4d. run an adapter script (output reader) to transform specific output format to scalarm model (output.json)
-		if _, err := os.Stat(path.Join(codeBaseDir, "output_reader")); err == nil {
-			fmt.Println("[SiM] Before output reader ...")
-			outputReaderCmd := exec.Command("sh", "-c", path.Join(codeBaseDir, "output_reader >>_stdout.txt 2>&1"))
-			outputReaderCmd.Dir = simulationDirPath
-			if err = outputReaderCmd.Run(); err != nil {
-				fmt.Println("[SiM] An error occurred during 'output_reader' execution.")
-				fmt.Println("[SiM] Please check if 'output_reader' executes correctly on the selected infrastructure.")
-				fmt.Printf("[Fatal error] occured during '%v' execution \n", strings.Join(outputReaderCmd.Args, " "))
-				fmt.Printf("[Fatal error] %s\n", err.Error())
-				PrintStdoutLog()
-				os.Exit(1)
-			}
-			fmt.Println("[SiM] After output reader ...")
-		}
-
-		// 4e. upload output json to experiment manager and set the run simulation as done
-		simulationRunResults := new(SimulationRunResults)
-
-		if _, err := os.Stat("output.json"); os.IsNotExist(err) {
-			simulationRunResults.Status = "error"
-			simulationRunResults.Reason = fmt.Sprintf("No output.json file found: %s", err.Error())
-		} else {
-			file, err = os.Open("output.json")
-
+			err = os.MkdirAll(simulationDirPath, 0777)
 			if err != nil {
+				Fatal(err)
+			}
+
+			input_parameters, _ := json.Marshal(simulation_run["input_parameters"].(map[string]interface{}))
+
+			err = ioutil.WriteFile(path.Join(simulationDirPath, "input.json"), input_parameters, 0777)
+			if err != nil {
+				Fatal(err)
+			}
+
+			simulationDir, err := os.Open(simulationDirPath)
+			if err != nil {
+				Fatal(err)
+			}
+
+			wd, err := os.Getwd()
+			fmt.Printf("[SiM] Working dir: %v\n", wd)
+			if err = simulationDir.Chdir(); err != nil {
+				Fatal(err)
+			}
+			wd, err = os.Getwd()
+
+			// 4b. run an adapter script (input writer) for input information: input.json -> some specific code
+			if _, err := os.Stat(path.Join(codeBaseDir, "input_writer")); err == nil {
+				fmt.Println("[SiM] Before input writer ...")
+				inputWriterCmd := exec.Command("sh", "-c", path.Join(codeBaseDir, "input_writer input.json >>_stdout.txt 2>&1"))
+				inputWriterCmd.Dir = simulationDirPath
+				if err = inputWriterCmd.Run(); err != nil {
+					fmt.Println("[SiM] An error occurred during 'input_writer' execution.")
+					fmt.Println("[SiM] Please check if 'input_writer' executes correctly on the selected infrastructure.")
+					fmt.Printf("[Fatal error] occured during '%v' execution \n", strings.Join(inputWriterCmd.Args, " "))
+					fmt.Printf("[Fatal error] %s\n", err.Error())
+					PrintStdoutLog()
+					os.Exit(1)
+				}
+				fmt.Println("[SiM] After input writer ...")
+			}
+
+			// 4c.1. progress monitoring scheduling if available - TODO
+			messages := make(chan struct{}, 1)
+			finished := make(chan struct{}, 1)
+			go IntermediateMonitoring(messages, finished, codeBaseDir, experimentManagers, simulation_index, config, simulationDirPath, client)
+
+			// 4c. run an executor of this simulation
+			fmt.Println("[SiM] Before executor ...")
+			executorCmd := exec.Command("sh", "-c", path.Join(codeBaseDir, "executor >>_stdout.txt 2>&1"))
+			executorCmd.Dir = simulationDirPath
+			if err = executorCmd.Run(); err != nil {
+				fmt.Println("[SiM] An error occurred during 'executor' execution.")
+				fmt.Println("[SiM] Please check if 'executor' executes correctly on the selected infrastructure.")
+				fmt.Printf("[Fatal error] occured during '%v' execution \n", strings.Join(executorCmd.Args, " "))
+				fmt.Printf("[Fatal error] %s\n", err.Error())
+				PrintStdoutLog()
+				os.Exit(1)
+			}
+			fmt.Println("[SiM] After executor ...")
+
+			messages <- struct{}{}
+			close(messages)
+
+			// 4d. run an adapter script (output reader) to transform specific output format to scalarm model (output.json)
+			if _, err := os.Stat(path.Join(codeBaseDir, "output_reader")); err == nil {
+				fmt.Println("[SiM] Before output reader ...")
+				outputReaderCmd := exec.Command("sh", "-c", path.Join(codeBaseDir, "output_reader >>_stdout.txt 2>&1"))
+				outputReaderCmd.Dir = simulationDirPath
+				if err = outputReaderCmd.Run(); err != nil {
+					fmt.Println("[SiM] An error occurred during 'output_reader' execution.")
+					fmt.Println("[SiM] Please check if 'output_reader' executes correctly on the selected infrastructure.")
+					fmt.Printf("[Fatal error] occured during '%v' execution \n", strings.Join(outputReaderCmd.Args, " "))
+					fmt.Printf("[Fatal error] %s\n", err.Error())
+					PrintStdoutLog()
+					os.Exit(1)
+				}
+				fmt.Println("[SiM] After output reader ...")
+			}
+
+			// 4e. upload output json to experiment manager and set the run simulation as done
+			simulationRunResults := new(SimulationRunResults)
+
+			if _, err := os.Stat("output.json"); os.IsNotExist(err) {
 				simulationRunResults.Status = "error"
-				simulationRunResults.Reason = fmt.Sprintf("Could not open output.json: %s", err.Error())
+				simulationRunResults.Reason = fmt.Sprintf("No output.json file found: %s", err.Error())
 			} else {
-				err = json.NewDecoder(file).Decode(&simulationRunResults)
+				file, err = os.Open("output.json")
 
 				if err != nil {
 					simulationRunResults.Status = "error"
-					simulationRunResults.Reason = fmt.Sprintf("Error during output.json parsing: %s", err.Error())
+					simulationRunResults.Reason = fmt.Sprintf("Could not open output.json: %s", err.Error())
+				} else {
+					err = json.NewDecoder(file).Decode(&simulationRunResults)
+
+					if err != nil {
+						simulationRunResults.Status = "error"
+						simulationRunResults.Reason = fmt.Sprintf("Error during output.json parsing: %s", err.Error())
+					}
 				}
+
+				file.Close()
 			}
 
-			file.Close()
-		}
+			resultJson, _ := json.Marshal(simulationRunResults.Results)
 
-		resultJson, _ := json.Marshal(simulationRunResults.Results)
-
-		if !simulationRunResults.isValid() || !isJSON(string(resultJson)) {
-			fmt.Printf("[output.json] Invalid results.json: %s\n", resultJson)
-			simulationRunResults.Status = "error"
-			simulationRunResults.Results = nil
-			simulationRunResults.Reason = fmt.Sprintf("Invalid results.json: %s", resultJson)
-			resultJson = nil
-		}
-
-		// 4f. upload structural results of a simulation run
-		data := url.Values{}
-		data.Set("status", simulationRunResults.Status)
-		data.Add("reason", simulationRunResults.Reason)
-		data.Add("result", string(resultJson))
-
-		fmt.Printf("[SiM] Results: %v\n", data)
-
-		markAsCompleteUrl := fmt.Sprintf("experiments/%s/simulations/%v/mark_as_complete", config.ExperimentId, simulation_index)
-		markAsCompleteInfo := RequestInfo{"POST", strings.NewReader(data.Encode()), "application/x-www-form-urlencoded",
-			markAsCompleteUrl}
-		body = ExecuteScalarmRequest(markAsCompleteInfo, experimentManagers, config, client, communicationTimeout)
-
-		fmt.Printf("[SiM] Response body: %s\n", body)
-
-		// 4g. upload binary output if provided
-		if _, err := os.Stat("output.tar.gz"); err == nil {
-			fmt.Printf("[SiM] Uploading 'output.tar.gz' ...\n")
-			file, err := os.Open("output.tar.gz")
-
-			if err != nil {
-				Fatal(err)
+			if !simulationRunResults.isValid() || !isJSON(string(resultJson)) {
+				fmt.Printf("[output.json] Invalid results.json: %s\n", resultJson)
+				simulationRunResults.Status = "error"
+				simulationRunResults.Results = nil
+				simulationRunResults.Reason = fmt.Sprintf("Invalid results.json: %s", resultJson)
+				resultJson = nil
 			}
 
-			defer file.Close()
+			// 4f. upload structural results of a simulation run
+			data := url.Values{}
+			data.Set("status", simulationRunResults.Status)
+			data.Add("reason", simulationRunResults.Reason)
+			data.Add("result", string(resultJson))
 
-			requestBody := &bytes.Buffer{}
-			writer := multipart.NewWriter(requestBody)
-			part, err := writer.CreateFormFile("file", filepath.Base("output.tar.gz"))
-			if err != nil {
-				Fatal(err)
-			}
-			_, err = io.Copy(part, file)
+			fmt.Printf("[SiM] Results: %v\n", data)
 
-			err = writer.Close()
-			if err != nil {
-				Fatal(err)
-			}
-
-			binariesUploadUrl := fmt.Sprintf("experiments/%s/simulations/%v", config.ExperimentId, simulation_index)
-			binariesUploadUrlInfo := RequestInfo{"PUT", requestBody, writer.FormDataContentType(), binariesUploadUrl}
-			body = ExecuteScalarmRequest(binariesUploadUrlInfo, storageManagers, config, client, communicationTimeout)
+			markAsCompleteUrl := fmt.Sprintf("experiments/%s/simulations/%v/mark_as_complete", experimentId, simulation_index)
+			markAsCompleteInfo := RequestInfo{"POST", strings.NewReader(data.Encode()), "application/x-www-form-urlencoded",
+				markAsCompleteUrl}
+			body = ExecuteScalarmRequest(markAsCompleteInfo, experimentManagers, config, client, communicationTimeout)
 
 			fmt.Printf("[SiM] Response body: %s\n", body)
-		}
 
-		// 4h. upload stdout if provided
-		if _, err := os.Stat("_stdout.txt"); err == nil {
-			fmt.Println("[SiM] Uploading STDOUT of the simulation run ...")
+			// 4g. upload binary output if provided
+			if _, err := os.Stat("output.tar.gz"); err == nil {
+				fmt.Printf("[SiM] Uploading 'output.tar.gz' ...\n")
+				file, err := os.Open("output.tar.gz")
 
-			file, err := os.Open("_stdout.txt")
-			if err != nil {
+				if err != nil {
+					Fatal(err)
+				}
+
+				defer file.Close()
+
+				requestBody := &bytes.Buffer{}
+				writer := multipart.NewWriter(requestBody)
+				part, err := writer.CreateFormFile("file", filepath.Base("output.tar.gz"))
+				if err != nil {
+					Fatal(err)
+				}
+				_, err = io.Copy(part, file)
+
+				err = writer.Close()
+				if err != nil {
+					Fatal(err)
+				}
+
+				binariesUploadUrl := fmt.Sprintf("experiments/%s/simulations/%v", experimentId, simulation_index)
+				binariesUploadUrlInfo := RequestInfo{"PUT", requestBody, writer.FormDataContentType(), binariesUploadUrl}
+				body = ExecuteScalarmRequest(binariesUploadUrlInfo, storageManagers, config, client, communicationTimeout)
+
+				fmt.Printf("[SiM] Response body: %s\n", body)
+			}
+
+			// 4h. upload stdout if provided
+			if _, err := os.Stat("_stdout.txt"); err == nil {
+				fmt.Println("[SiM] Uploading STDOUT of the simulation run ...")
+
+				file, err := os.Open("_stdout.txt")
+				if err != nil {
+					Fatal(err)
+				}
+
+				requestBody := &bytes.Buffer{}
+				writer := multipart.NewWriter(requestBody)
+				part, err := writer.CreateFormFile("file", filepath.Base("_stdout.txt"))
+				if err != nil {
+					Fatal(err)
+				}
+				_, err = io.Copy(part, file)
+				file.Close()
+
+				err = writer.Close()
+				if err != nil {
+					Fatal(err)
+				}
+
+				stdoutUploadUrl := fmt.Sprintf("experiments/%s/simulations/%v/stdout", experimentId, simulation_index)
+				stdoutUploadUrlInfo := RequestInfo{"PUT", requestBody, writer.FormDataContentType(), stdoutUploadUrl}
+				body = ExecuteScalarmRequest(stdoutUploadUrlInfo, storageManagers, config, client, communicationTimeout)
+
+				fmt.Printf("[SiM] Response body: %s\n", body)
+			}
+
+			// 5. clean up - removing simulation dir
+			go func() {
+				select {
+				case _ = <-finished:
+					os.RemoveAll(simulationDirPath)
+					close(finished)
+				}
+			}()
+
+			// 6. going to the root dir and moving
+			if err = rootDir.Chdir(); err != nil {
 				Fatal(err)
 			}
-
-			requestBody := &bytes.Buffer{}
-			writer := multipart.NewWriter(requestBody)
-			part, err := writer.CreateFormFile("file", filepath.Base("_stdout.txt"))
-			if err != nil {
-				Fatal(err)
-			}
-			_, err = io.Copy(part, file)
-			file.Close()
-
-			err = writer.Close()
-			if err != nil {
-				Fatal(err)
-			}
-
-			stdoutUploadUrl := fmt.Sprintf("experiments/%s/simulations/%v/stdout", config.ExperimentId, simulation_index)
-			stdoutUploadUrlInfo := RequestInfo{"PUT", requestBody, writer.FormDataContentType(), stdoutUploadUrl}
-			body = ExecuteScalarmRequest(stdoutUploadUrlInfo, storageManagers, config, client, communicationTimeout)
-
-			fmt.Printf("[SiM] Response body: %s\n", body)
-		}
-
-		// 5. clean up - removing simulation dir
-		go func() {
-			select {
-			case _ = <-finished:
-				os.RemoveAll(simulationDirPath)
-				close(finished)
-			}
-		}()
-
-		// 6. going to the root dir and moving
-		if err = rootDir.Chdir(); err != nil {
-			Fatal(err)
 		}
 	}
 }
