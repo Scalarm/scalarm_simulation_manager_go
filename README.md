@@ -37,7 +37,7 @@ Config
 -------- 
 Configuration is read from config.json file that contains required informations for Scalarm Simulation Manager:
 
-* experiment_id (string)
+* experiment_id (string) - optional, if not specified, all user's experiment in random order will be computed
 * information_service_url (string)
 * experiment_manager_user (string)
 * experiment_manager_pass (string)
