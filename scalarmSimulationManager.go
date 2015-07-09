@@ -26,7 +26,7 @@ import (
 	"container/list"
 )
 
-const VERSION string = "15.06.0-random-experiments"
+const VERSION string = "15.06.1-alpha"
 
 // Config file description - this should be provided by Experiment Manager in 'config.json'
 type SimulationManagerConfig struct {
