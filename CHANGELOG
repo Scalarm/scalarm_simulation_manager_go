@@ -1,0 +1,5 @@
+TODO: add feature notes for versions prior to 15.04
+
+15.06.1-alpha:
+- SCAL-821: getting random experiments if experiment_id not specified in config file.
+
