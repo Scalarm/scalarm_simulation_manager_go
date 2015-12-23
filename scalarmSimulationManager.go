@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 	"container/list"
+	scalarm_worker "github.com/Scalarm/scalarm_simulation_manager_go/scalarm_worker"
 )
 
 const VERSION string = "15.06.1-alpha"
@@ -121,7 +122,7 @@ func Extract(zip_path, dest string) error {
 	return nil
 }
 
-func ExecuteScalarmRequest(reqInfo RequestInfo, serviceUrls []string, config *SimulationManagerConfig,
+func ExecuteScalarmRequest(reqInfo RequestInfo, serviceUrls []string, config *scalarm_worker.SimulationManagerConfig,
 	client *http.Client, timeout time.Duration) []byte {
 
 	protocol := "https"
@@ -191,7 +192,7 @@ func GetWithTimeout(client *http.Client, request *http.Request, communicationTim
 
 // this method executes progress monitor of a simulation run and stops when it gets a signal from the main thread
 func IntermediateMonitoring(messages chan struct{}, finished chan struct{}, codeBaseDir string, experimentManagers []string, simIndex float64,
-	config *SimulationManagerConfig, simulationDirPath string, client *http.Client, experimentId string) {
+	config *scalarm_worker.SimulationManagerConfig, simulationDirPath string, client *http.Client, experimentId string) {
 
 	communicationTimeout := 30 * time.Second
 
@@ -265,14 +266,9 @@ func IntermediateMonitoring(messages chan struct{}, finished chan struct{}, code
 	}
 }
 
-func isJSON(s string) bool {
-	var js map[string]interface{}
-	return json.Unmarshal([]byte(s), &js) == nil
-}
-
 // Makes request to experiments/random_experiment
 // Returns String: random experiment id available for current user
-func GetRandomExperimentId(config *SimulationManagerConfig, experimentManagers []string, client *http.Client) string {
+func GetRandomExperimentId(config *scalarm_worker.SimulationManagerConfig, experimentManagers []string, client *http.Client) string {
 	communicationTimeout := 30 * time.Second
 	fmt.Printf("[SiM] Getting random experiment id...\n")
 	getExpReqInfo := RequestInfo{"GET", nil, "", "experiments/random_experiment"}
@@ -308,22 +304,11 @@ func main() {
 	fmt.Printf("[SiM] working directory: %s\n", rootDirPath)
 
 	// 1. load config file
-	configFile, err := os.Open("config.json")
+	config, err := scalarm_worker.CreateSimulationManagerConfig("config.json")
 	if err != nil {
 		Fatal(err)
 	}
 
-	config := new(SimulationManagerConfig)
-	err = json.NewDecoder(configFile).Decode(&config)
-	configFile.Close()
-
-	if err != nil {
-		Fatal(err)
-	}
-
-	if config.Timeout <= 0 {
-		config.Timeout = 60
-	}
 	communicationTimeout := time.Duration(config.Timeout) * time.Second
 
 	// -- HTTP client --
@@ -358,37 +343,26 @@ func main() {
 	}
 
 	//2. getting experiment and storage manager addresses
-	iSReqInfo := RequestInfo{"GET", nil, "", "experiment_managers"}
-	body := ExecuteScalarmRequest(iSReqInfo, []string{config.InformationServiceUrl}, config, client, communicationTimeout)
+	is := scalarm_worker.InformationService{
+				HttpClient: client,
+				BaseUrl: config.InformationServiceUrl,
+				CommunicationTimeout: communicationTimeout,
+				Config: config}
 
 	var experimentManagers []string
-
-	fmt.Printf("[SiM] Response body: %s.\n", body)
-
-	if err := json.Unmarshal(body, &experimentManagers); err != nil {
+	experimentManagers, err = is.GetExperimentManagers()
+	if err != nil {
 		Fatal(err)
-	}
-
-	if len(experimentManagers) == 0 {
-		Fatal(fmt.Errorf("There is no Experiment Manager registered in Information Service. Please contact Scalarm administrators."))
 	}
 
 	// getting storage manager address
-	iSReqInfo = RequestInfo{"GET", nil, "", "storage_managers"}
-	body = ExecuteScalarmRequest(iSReqInfo, []string{config.InformationServiceUrl}, config, client, communicationTimeout)
-
 	var storageManagers []string
-
-	fmt.Printf("[SiM] Response body: %s.\n", body)
-
-	if err := json.Unmarshal(body, &storageManagers); err != nil {
+	storageManagers, err = is.GetStorageManagers()
+	if err != nil {
 		Fatal(err)
 	}
 
-	if len(storageManagers) == 0 {
-		Fatal(fmt.Errorf("There is no Storage Manager registered in Information Service. Please contact Scalarm administrators."))
-	}
-	
+
 	var experimentId string
 	executedExperiments := list.New()
 	singleExperiment := false
@@ -437,7 +411,7 @@ func main() {
 			fmt.Println("[SiM] Getting code base ...")
 			codeBaseUrl := fmt.Sprintf("experiments/%s/code_base", experimentId)
 			codeBaseInfo := RequestInfo{"GET", nil, "", codeBaseUrl}
-			body = ExecuteScalarmRequest(codeBaseInfo, experimentManagers, config, client, communicationTimeout)
+			body := ExecuteScalarmRequest(codeBaseInfo, experimentManagers, config, client, communicationTimeout)
 
 			w, err := os.Create(path.Join(codeBaseDir, "code_base.zip"))
 			if err != nil {
@@ -640,7 +614,7 @@ func main() {
 
 			resultJson, _ := json.Marshal(simulationRunResults.Results)
 
-			if !simulationRunResults.isValid() || !isJSON(string(resultJson)) {
+			if !simulationRunResults.isValid() || !scalarm_worker.IsJSON(string(resultJson)) {
 				fmt.Printf("[output.json] Invalid results.json: %s\n", resultJson)
 				simulationRunResults.Status = "error"
 				simulationRunResults.Results = nil
@@ -659,7 +633,7 @@ func main() {
 			markAsCompleteUrl := fmt.Sprintf("experiments/%s/simulations/%v/mark_as_complete", experimentId, simulation_index)
 			markAsCompleteInfo := RequestInfo{"POST", strings.NewReader(data.Encode()), "application/x-www-form-urlencoded",
 				markAsCompleteUrl}
-			body = ExecuteScalarmRequest(markAsCompleteInfo, experimentManagers, config, client, communicationTimeout)
+			body := ExecuteScalarmRequest(markAsCompleteInfo, experimentManagers, config, client, communicationTimeout)
 
 			fmt.Printf("[SiM] Response body: %s\n", body)
 
