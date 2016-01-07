@@ -5,32 +5,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"reflect"
 	"time"
 )
 
 // =========== UTILS/SETUP ===========
-
-func getSimConfig() (*SimulationManagerConfig) {
-	return &SimulationManagerConfig{
-			ExperimentManagerUser: "user",
-			ExperimentManagerPass: "pass",
-			Development: true,
-		}
-}
-
-func getHttpClientMock(testServerUrl string) (*http.Client) {
-
-	// Make a transport that reroutes all traffic to the example server
-	transport := &http.Transport{
-		Proxy: func(req *http.Request) (*url.URL, error) {
-			return url.Parse(testServerUrl)
-		},
-	}
-
-	return &http.Client{Transport: transport}
-}
 
 func setupInformationService(config *SimulationManagerConfig, client *http.Client) InformationService {
 	return InformationService{

@@ -18,7 +18,7 @@ type InformationService struct {
 }
 
 func (is *InformationService) GetExperimentManagers() ([]string, error) {
-	iSReqInfo := RequestInfo{"GET", nil, "", "experiment_managers"}
+	iSReqInfo := RequestInfo{"GET", nil, "application/json", "experiment_managers"}
 
 	resp, err := ExecuteScalarmRequest(iSReqInfo, []string{is.BaseUrl}, is.Config, is.HttpClient, is.CommunicationTimeout)
 
@@ -30,7 +30,7 @@ func (is *InformationService) GetExperimentManagers() ([]string, error) {
 }
 
 func (is *InformationService) GetStorageManagers() ([]string, error) {
-	iSReqInfo := RequestInfo{"GET", nil, "", "storage_managers"}
+	iSReqInfo := RequestInfo{"GET", nil, "application/json", "storage_managers"}
 
 	resp, err := ExecuteScalarmRequest(iSReqInfo, []string{is.BaseUrl}, is.Config, is.HttpClient, is.CommunicationTimeout)
 

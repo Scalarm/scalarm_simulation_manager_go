@@ -43,6 +43,9 @@ func ExecuteScalarmRequest(reqInfo RequestInfo, serviceUrls []string, config *Si
 			Fatal(err)
 		}
 		req.SetBasicAuth(config.ExperimentManagerUser, config.ExperimentManagerPass)
+
+		req.Header.Set("Accept", "application/json")
+
 		if reqInfo.Body != nil {
 			req.Header.Set("Content-Type", reqInfo.ContentType)
 		}
