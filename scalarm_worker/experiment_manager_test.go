@@ -18,7 +18,8 @@ func setupExperimentManager(config *SimulationManagerConfig, client *http.Client
 		HttpClient:           client,
 		BaseUrls:              []string{"system.scalarm.com"},
 		CommunicationTimeout: 5 * time.Second,
-		Config:               config}
+		Config:               config,
+		ExperimentId:					"568e5bece138232e76000002"}
 }
 
 // =========== =========== ===========
@@ -45,7 +46,7 @@ func TestExperimentManagerShouldAskForJsonFormatWhenRequestingNextSimulation(t *
 	em := setupExperimentManager(getSimConfig(), getHttpClientMock(server.URL))
 
 	// === WHEN ===
-	nextSimulationRunConfig, err := em.GetNextSimulationRunConfig("568e5bece138232e76000002")
+	nextSimulationRunConfig, err := em.GetNextSimulationRunConfig()
 
 	// === THEN ===
 	if err != nil {
@@ -90,7 +91,7 @@ func TestExperimentManagerShouldAskForJsonFormatWhenSendingMarkAsComplete(t *tes
 	fmt.Printf("[SiM] Results: %v\n", simRunResult)
 
 	// === WHEN ===
-	resp, err := em.MarkSimulationRunAsComplete("568e5bece138232e76000002", 1, simRunResult)
+	resp, err := em.MarkSimulationRunAsComplete(1, simRunResult)
 
 	// === THEN ===
 	if err != nil {
@@ -126,7 +127,7 @@ func TestExperimentManagerShouldHandleHttpErrorsWhenSendingMarkAsComplete(t *tes
 	fmt.Printf("[SiM] Results: %v\n", simRunResult)
 
 	// === WHEN ===
-	_, err := em.MarkSimulationRunAsComplete("568e5bece138232e76000002", 1, simRunResult)
+	_, err := em.MarkSimulationRunAsComplete(1, simRunResult)
 
 	// === THEN ===
 	if err == nil {
@@ -154,7 +155,7 @@ func TestExperimentManagerShouldHandleScalarmErrorsWhenSendingMarkAsComplete(t *
 	simRunResult.Add("result", string(simRunResultJson))
 
 	// === WHEN ===
-	_, err := em.MarkSimulationRunAsComplete("568e5bece138232e76000002", 1, simRunResult)
+	_, err := em.MarkSimulationRunAsComplete(1, simRunResult)
 
   expectedError := "Something went wrong"
 
@@ -189,7 +190,7 @@ func TestExperimentManagerShouldHandleScalarmErrorsWithoutReasonsWhenSendingMark
 	simRunResult.Add("result", string(simRunResultJson))
 
 	// === WHEN ===
-	_, err := em.MarkSimulationRunAsComplete("568e5bece138232e76000002", 1, simRunResult)
+	_, err := em.MarkSimulationRunAsComplete(1, simRunResult)
 
   expectedError := "Something went wrong but without any details"
 

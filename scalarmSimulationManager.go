@@ -196,6 +196,13 @@ func IntermediateMonitoring(messages chan struct{}, finished chan struct{}, code
 
 	communicationTimeout := 30 * time.Second
 
+	em := scalarm_worker.ExperimentManager{
+					HttpClient: client,
+					BaseUrls: experimentManagers,
+					CommunicationTimeout: communicationTimeout,
+					Config: config,
+					ExperimentId: experimentId}
+
 	if _, err := os.Stat(path.Join(codeBaseDir, "progress_monitor")); err == nil {
 		for {
 			progressMonitorCmd := exec.Command("sh", "-c", path.Join(codeBaseDir, "progress_monitor >>_stdout.txt 2>&1"))
@@ -242,13 +249,11 @@ func IntermediateMonitoring(messages chan struct{}, finished chan struct{}, code
 
 				fmt.Printf("[SiM][progress_info] Results: %v\n", data)
 
-				progressInfo := RequestInfo{"POST", strings.NewReader(data.Encode()),
-					"application/x-www-form-urlencoded",
-					fmt.Sprintf("experiments/%v/simulations/%v/progress_info", experimentId, simIndex)}
+				err = em.PostProgressInfo(simIndex, data)
 
-				body := ExecuteScalarmRequest(progressInfo, experimentManagers, config, client, communicationTimeout)
-
-				fmt.Printf("[SiM][progress_info] Response body: %s\n", body)
+				if err != nil {
+					Fatal(err)
+				}
 			}
 
 			time.Sleep(10 * time.Second)
@@ -397,6 +402,13 @@ func main() {
 		// creating directory for experiment data
 		experimentDir = path.Join(rootDirPath, fmt.Sprintf("experiment_%s", experimentId))
 
+		em := scalarm_worker.ExperimentManager{
+						HttpClient: client,
+						BaseUrls: experimentManagers,
+						CommunicationTimeout: communicationTimeout,
+						Config: config,
+						ExperimentId: experimentId}
+
 		if err = os.MkdirAll(experimentDir, 0777); err != nil {
 			Fatal(err)
 		}
@@ -409,17 +421,9 @@ func main() {
 				Fatal(err)
 			}
 			fmt.Println("[SiM] Getting code base ...")
-			codeBaseUrl := fmt.Sprintf("experiments/%s/code_base", experimentId)
-			codeBaseInfo := RequestInfo{"GET", nil, "", codeBaseUrl}
-			body := ExecuteScalarmRequest(codeBaseInfo, experimentManagers, config, client, communicationTimeout)
 
-			w, err := os.Create(path.Join(codeBaseDir, "code_base.zip"))
+			err = em.DownloadExperimentCodeBase(codeBaseDir)
 			if err != nil {
-				Fatal(err)
-			}
-			defer w.Close()
-
-			if _, err = io.Copy(w, bytes.NewReader(body)); err != nil {
 				Fatal(err)
 			}
 
@@ -449,39 +453,34 @@ func main() {
 			nextSimulationFailed := true
 			communicationStart := time.Now()
 
-			var nextSimulationBody []byte
 			var simulation_run map[string]interface{}
 			wait := false
 
 			// 4.a getting input values for next simulation run
 			for communicationStart.Add(communicationTimeout * time.Duration(len(experimentManagers))).After(time.Now()) {
 				fmt.Println("[SiM] Getting next simulation run ...")
-				nextSimulationUrl := fmt.Sprintf("experiments/%s/next_simulation", experimentId)
-				nextSimulationInfo := RequestInfo{"GET", nil, "", nextSimulationUrl}
-				nextSimulationBody = ExecuteScalarmRequest(nextSimulationInfo, experimentManagers, config, client, communicationTimeout)
+				simulation_run, err = em.GetNextSimulationRunConfig()
 
-				fmt.Printf("[SiM] Next simulation: %s\n", nextSimulationBody)
+				if err != nil {
+					Fatal(err)
+				}
 
-				if err = json.Unmarshal(nextSimulationBody, &simulation_run); err != nil {
-					fmt.Printf("[SiM] %v\n", err)
+				status := simulation_run["status"].(string)
+
+				if status == "all_sent" {
+					fmt.Println("[SiM] There is no more simulations to run in this experiment.")
+				} else if status == "error" {
+					fmt.Println("[SiM] An error occurred while getting next simulation.")
+				} else if status == "wait" {
+					fmt.Printf("[SiM] There is no more simulations to run in this experiment "+
+						"at the moment, time to wait: %vs\n", simulation_run["duration_in_seconds"])
+					wait = true
+					break
+				} else if status != "ok" {
+					fmt.Println("[SiM] We cannot continue due to unsupported status.")
 				} else {
-					status := simulation_run["status"].(string)
-
-					if status == "all_sent" {
-						fmt.Println("[SiM] There is no more simulations to run in this experiment.")
-					} else if status == "error" {
-						fmt.Println("[SiM] An error occurred while getting next simulation.")
-					} else if status == "wait" {
-						fmt.Printf("[SiM] There is no more simulations to run in this experiment "+
-							"at the moment, time to wait: %vs\n", simulation_run["duration_in_seconds"])
-						wait = true
-						break
-					} else if status != "ok" {
-						fmt.Println("[SiM] We cannot continue due to unsupported status.")
-					} else {
-						nextSimulationFailed = false
-						break
-					}
+					nextSimulationFailed = false
+					break
 				}
 
 				fmt.Println("[SiM] There was a problem while getting next simulation to run.")
@@ -630,13 +629,7 @@ func main() {
 
 			fmt.Printf("[SiM] Results: %v\n", data)
 
-			em := scalarm_worker.ExperimentManager{
-							HttpClient: client,
-							BaseUrls: experimentManagers,
-							CommunicationTimeout: communicationTimeout,
-							Config: config}
-
-			_, err = em.MarkSimulationRunAsComplete(experimentId, simulation_index, data)
+			_, err = em.MarkSimulationRunAsComplete(simulation_index, data)
 			if err != nil {
 				fmt.Println("[SiM] Error during marking simulation run as complete.")
 				Fatal(err)
