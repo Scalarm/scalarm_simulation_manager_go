@@ -9,24 +9,25 @@ import (
 	"errors"
 	"net/url"
 	"strconv"
+  "strings"
 )
 
 type ExperimentManager struct {
 	HttpClient           *http.Client
-	BaseUrl              string
+	BaseUrls             []string
 	CommunicationTimeout time.Duration
 	Config               *SimulationManagerConfig
 	Username             string
 	Password             string
 }
 
-func (em *ExperimentManager) GetNextSimulationRunConfig(experiment_id string) (map[string]interface{}, error) {
+func (em *ExperimentManager) GetNextSimulationRunConfig(experimentId string) (map[string]interface{}, error) {
 	nextSimulationRunConfig := map[string]interface{}{}
 
-	path := "experiments/" + experiment_id + "/next_simulation"
+	path := "experiments/" + experimentId + "/next_simulation"
 	reqInfo := RequestInfo{"GET", nil, "", path}
 
-	resp, err := ExecuteScalarmRequest(reqInfo, []string{em.BaseUrl}, em.Config, em.HttpClient, em.CommunicationTimeout)
+	resp, err := ExecuteScalarmRequest(reqInfo, em.BaseUrls, em.Config, em.HttpClient, em.CommunicationTimeout)
 
 	if err != nil {
 		return nil, err
@@ -57,13 +58,13 @@ func (em *ExperimentManager) GetNextSimulationRunConfig(experiment_id string) (m
 	}
 }
 
-func (em *ExperimentManager) MarkSimulationRunAsComplete(experiment_id string, simulation_index int, runResult url.Values) (map[string]interface{}, error) {
+func (em *ExperimentManager) MarkSimulationRunAsComplete(experimentId string, simulationIndex int, runResult url.Values) (map[string]interface{}, error) {
   emResponse := map[string]interface{} {}
 
-  path := "experiments/" + experiment_id + "/simulations/" + strconv.Itoa(simulation_index) + "/mark_as_complete"
-	reqInfo := RequestInfo{"POST", nil, "application/x-www-form-urlencoded", path}
+  path := "experiments/" + experimentId + "/simulations/" + strconv.Itoa(simulationIndex) + "/mark_as_complete"
+	reqInfo := RequestInfo{"POST", strings.NewReader(runResult.Encode()), "application/x-www-form-urlencoded", path}
 
-	resp, err := ExecuteScalarmRequest(reqInfo, []string{em.BaseUrl}, em.Config, em.HttpClient, em.CommunicationTimeout)
+	resp, err := ExecuteScalarmRequest(reqInfo, em.BaseUrls, em.Config, em.HttpClient, em.CommunicationTimeout)
 
 	if err != nil {
 		return nil, err

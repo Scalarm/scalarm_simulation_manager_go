@@ -16,7 +16,7 @@ import (
 func setupExperimentManager(config *SimulationManagerConfig, client *http.Client) ExperimentManager {
 	return ExperimentManager{
 		HttpClient:           client,
-		BaseUrl:              "system.scalarm.com",
+		BaseUrls:              []string{"system.scalarm.com"},
 		CommunicationTimeout: 5 * time.Second,
 		Config:               config}
 }

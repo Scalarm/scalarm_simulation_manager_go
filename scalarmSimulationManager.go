@@ -61,7 +61,7 @@ type RequestInfo struct {
 }
 
 func Fatal(err error) {
-	fmt.Println("[Fatal error] %s\n", err.Error())
+	fmt.Printf("[Fatal error] %v\n", err)
 	os.Exit(1)
 }
 
@@ -191,7 +191,7 @@ func GetWithTimeout(client *http.Client, request *http.Request, communicationTim
 }
 
 // this method executes progress monitor of a simulation run and stops when it gets a signal from the main thread
-func IntermediateMonitoring(messages chan struct{}, finished chan struct{}, codeBaseDir string, experimentManagers []string, simIndex float64,
+func IntermediateMonitoring(messages chan struct{}, finished chan struct{}, codeBaseDir string, experimentManagers []string, simIndex int,
 	config *scalarm_worker.SimulationManagerConfig, simulationDirPath string, client *http.Client, experimentId string) {
 
 	communicationTimeout := 30 * time.Second
@@ -288,7 +288,7 @@ func listIncludeString(l *list.List, a string) bool {
 
 func main() {
 	fmt.Printf("[SiM] Scalarm Simulation Manager, version: %s\n", VERSION)
-    
+
 	var file *os.File
 	var experimentDir string
 
@@ -373,17 +373,17 @@ func main() {
 			experimentId = ""
 			for experimentId == "" {
 				experimentId = GetRandomExperimentId(config, experimentManagers, client);
-				
+
 				if experimentId == "" {
 					fmt.Printf("[SiM] Random experiment id empty, waiting 30 seconds to try again\n")
 					time.Sleep(30 * time.Second)
-					
+
 				// check if this experiment was executed by this SiM
 				} else if listIncludeString(executedExperiments, experimentId) {
 					fmt.Printf("[SiM] That experiment was already executed, waiting 10 seconds to get other id\n")
 					experimentId = ""
 					time.Sleep(10 * time.Second)
-					
+
 				// its new experiment - add it to executed list
 				} else {
 					executedExperiments.PushBack(experimentId)
@@ -393,7 +393,7 @@ func main() {
 			experimentId = config.ExperimentId
 			singleExperiment = true
 		}
-		
+
 		// creating directory for experiment data
 		experimentDir = path.Join(rootDirPath, fmt.Sprintf("experiment_%s", experimentId))
 
@@ -503,7 +503,7 @@ func main() {
 				}
 			}
 
-			simulation_index := simulation_run["simulation_id"].(float64)
+			simulation_index := int(simulation_run["simulation_id"].(float64))
 
 			fmt.Printf("[SiM] Simulation index: %v\n", simulation_index)
 			fmt.Printf("[SiM] Simulation execution constraints: %v\n", simulation_run["execution_constraints"])
@@ -630,12 +630,17 @@ func main() {
 
 			fmt.Printf("[SiM] Results: %v\n", data)
 
-			markAsCompleteUrl := fmt.Sprintf("experiments/%s/simulations/%v/mark_as_complete", experimentId, simulation_index)
-			markAsCompleteInfo := RequestInfo{"POST", strings.NewReader(data.Encode()), "application/x-www-form-urlencoded",
-				markAsCompleteUrl}
-			body := ExecuteScalarmRequest(markAsCompleteInfo, experimentManagers, config, client, communicationTimeout)
+			em := scalarm_worker.ExperimentManager{
+							HttpClient: client,
+							BaseUrls: experimentManagers,
+							CommunicationTimeout: communicationTimeout,
+							Config: config}
 
-			fmt.Printf("[SiM] Response body: %s\n", body)
+			_, err = em.MarkSimulationRunAsComplete(experimentId, simulation_index, data)
+			if err != nil {
+				fmt.Println("[SiM] Error during marking simulation run as complete.")
+				Fatal(err)
+			}
 
 			// 4g. upload binary output if provided
 			if _, err := os.Stat("output.tar.gz"); err == nil {
@@ -663,7 +668,7 @@ func main() {
 
 				binariesUploadUrl := fmt.Sprintf("experiments/%s/simulations/%v", experimentId, simulation_index)
 				binariesUploadUrlInfo := RequestInfo{"PUT", requestBody, writer.FormDataContentType(), binariesUploadUrl}
-				body = ExecuteScalarmRequest(binariesUploadUrlInfo, storageManagers, config, client, communicationTimeout)
+				body := ExecuteScalarmRequest(binariesUploadUrlInfo, storageManagers, config, client, communicationTimeout)
 
 				fmt.Printf("[SiM] Response body: %s\n", body)
 			}
@@ -693,7 +698,7 @@ func main() {
 
 				stdoutUploadUrl := fmt.Sprintf("experiments/%s/simulations/%v/stdout", experimentId, simulation_index)
 				stdoutUploadUrlInfo := RequestInfo{"PUT", requestBody, writer.FormDataContentType(), stdoutUploadUrl}
-				body = ExecuteScalarmRequest(stdoutUploadUrlInfo, storageManagers, config, client, communicationTimeout)
+				body := ExecuteScalarmRequest(stdoutUploadUrlInfo, storageManagers, config, client, communicationTimeout)
 
 				fmt.Printf("[SiM] Response body: %s\n", body)
 			}
