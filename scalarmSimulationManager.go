@@ -420,20 +420,20 @@ func main() {
 				Fatal(err)
 			}
 
-			communicationStart := time.Now()
-
-			for communicationStart.Add(communicationTimeout).After(time.Now()) {
+			for i := 0; i < 10; i++ {
 				fmt.Println("[SiM] Getting code base ...")
 
 				err = em.DownloadExperimentCodeBase(codeBaseDir)
 				if err != nil {
 					fmt.Printf("[SiM] There was a problem while getting code base: %v\n", err)
 				} else {
+
 					if err = Extract(codeBaseDir+"/code_base.zip", codeBaseDir); err != nil {
 						fmt.Println("[SiM] An error occurred while unzipping 'code_base.zip'.")
 						fmt.Println("[Error] occured while unzipping 'code_base.zip'.")
 						fmt.Printf("[Error] %s\n", err.Error())
 					}
+
 					if err = Extract(codeBaseDir+"/simulation_binaries.zip", codeBaseDir); err != nil {
 						fmt.Println("[SiM] An error occurred while unzipping 'simulation_binaries.zip'.")
 						fmt.Println("[Error] occured while unzipping 'simulation_binaries.zip'.")
