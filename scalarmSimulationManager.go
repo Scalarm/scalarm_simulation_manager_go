@@ -420,24 +420,31 @@ func main() {
 			if err = os.MkdirAll(codeBaseDir, 0777); err != nil {
 				Fatal(err)
 			}
-			fmt.Println("[SiM] Getting code base ...")
 
-			err = em.DownloadExperimentCodeBase(codeBaseDir)
-			if err != nil {
-				Fatal(err)
-			}
+			for communicationStart.Add(communicationTimeout).After(time.Now()) {
+				fmt.Println("[SiM] Getting code base ...")
 
-			if err = Extract(codeBaseDir+"/code_base.zip", codeBaseDir); err != nil {
-				fmt.Println("[SiM] An error occurred while unzipping 'code_base.zip'.")
-				fmt.Println("[Fatal error] occured while unzipping 'code_base.zip'.")
-				fmt.Printf("[Fatal error] %s\n", err.Error())
-				os.Exit(2)
-			}
-			if err = Extract(codeBaseDir+"/simulation_binaries.zip", codeBaseDir); err != nil {
-				fmt.Println("[SiM] An error occurred while unzipping 'simulation_binaries.zip'.")
-				fmt.Println("[Fatal error] occured while unzipping 'simulation_binaries.zip'.")
-				fmt.Printf("[Fatal error] %s\n", err.Error())
-				os.Exit(2)
+				err = em.DownloadExperimentCodeBase(codeBaseDir)
+				if err != nil {
+					fmt.Printf("[SiM] There was a problem while getting code base: %v\n", err)
+				} else {
+					if err = Extract(codeBaseDir+"/code_base.zip", codeBaseDir); err != nil {
+						fmt.Println("[SiM] An error occurred while unzipping 'code_base.zip'.")
+						fmt.Println("[Error] occured while unzipping 'code_base.zip'.")
+						fmt.Printf("[Error] %s\n", err.Error())
+					}
+					if err = Extract(codeBaseDir+"/simulation_binaries.zip", codeBaseDir); err != nil {
+						fmt.Println("[SiM] An error occurred while unzipping 'simulation_binaries.zip'.")
+						fmt.Println("[Error] occured while unzipping 'simulation_binaries.zip'.")
+						fmt.Printf("[Error] %s\n", err.Error())
+					}
+				}
+
+				if err == nil {
+					break
+				} else {
+					time.Sleep(5 * time.Second)
+				}
 			}
 
 			if err = exec.Command("sh", "-c", fmt.Sprintf("chmod a+x \"%s\"/*", codeBaseDir)).Run(); err != nil {
