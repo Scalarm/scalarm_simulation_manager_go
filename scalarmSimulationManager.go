@@ -20,11 +20,11 @@ import (
 	"path"
 	"path/filepath"
 	// "runtime"
+	"container/list"
+	scalarm_worker "github.com/Scalarm/scalarm_simulation_manager_go/scalarm_worker"
 	"math/rand"
 	"strings"
 	"time"
-	"container/list"
-	scalarm_worker "github.com/Scalarm/scalarm_simulation_manager_go/scalarm_worker"
 )
 
 const VERSION string = "15.06.1-alpha"
@@ -197,11 +197,11 @@ func IntermediateMonitoring(messages chan struct{}, finished chan struct{}, code
 	communicationTimeout := 30 * time.Second
 
 	em := scalarm_worker.ExperimentManager{
-					HttpClient: client,
-					BaseUrls: experimentManagers,
-					CommunicationTimeout: communicationTimeout,
-					Config: config,
-					ExperimentId: experimentId}
+		HttpClient:           client,
+		BaseUrls:             experimentManagers,
+		CommunicationTimeout: communicationTimeout,
+		Config:               config,
+		ExperimentId:         experimentId}
 
 	if _, err := os.Stat(path.Join(codeBaseDir, "progress_monitor")); err == nil {
 		for {
@@ -349,10 +349,10 @@ func main() {
 
 	//2. getting experiment and storage manager addresses
 	is := scalarm_worker.InformationService{
-				HttpClient: client,
-				BaseUrl: config.InformationServiceUrl,
-				CommunicationTimeout: communicationTimeout,
-				Config: config}
+		HttpClient:           client,
+		BaseUrl:              config.InformationServiceUrl,
+		CommunicationTimeout: communicationTimeout,
+		Config:               config}
 
 	var experimentManagers []string
 	experimentManagers, err = is.GetExperimentManagers()
@@ -367,7 +367,6 @@ func main() {
 		Fatal(err)
 	}
 
-
 	var experimentId string
 	executedExperiments := list.New()
 	singleExperiment := false
@@ -377,19 +376,19 @@ func main() {
 		if config.ExperimentId == "" {
 			experimentId = ""
 			for experimentId == "" {
-				experimentId = GetRandomExperimentId(config, experimentManagers, client);
+				experimentId = GetRandomExperimentId(config, experimentManagers, client)
 
 				if experimentId == "" {
 					fmt.Printf("[SiM] Random experiment id empty, waiting 30 seconds to try again\n")
 					time.Sleep(30 * time.Second)
 
-				// check if this experiment was executed by this SiM
+					// check if this experiment was executed by this SiM
 				} else if listIncludeString(executedExperiments, experimentId) {
 					fmt.Printf("[SiM] That experiment was already executed, waiting 10 seconds to get other id\n")
 					experimentId = ""
 					time.Sleep(10 * time.Second)
 
-				// its new experiment - add it to executed list
+					// its new experiment - add it to executed list
 				} else {
 					executedExperiments.PushBack(experimentId)
 				}
@@ -403,11 +402,11 @@ func main() {
 		experimentDir = path.Join(rootDirPath, fmt.Sprintf("experiment_%s", experimentId))
 
 		em := scalarm_worker.ExperimentManager{
-						HttpClient: client,
-						BaseUrls: experimentManagers,
-						CommunicationTimeout: communicationTimeout,
-						Config: config,
-						ExperimentId: experimentId}
+			HttpClient:           client,
+			BaseUrls:             experimentManagers,
+			CommunicationTimeout: communicationTimeout,
+			Config:               config,
+			ExperimentId:         experimentId}
 
 		if err = os.MkdirAll(experimentDir, 0777); err != nil {
 			Fatal(err)
@@ -420,6 +419,8 @@ func main() {
 			if err = os.MkdirAll(codeBaseDir, 0777); err != nil {
 				Fatal(err)
 			}
+
+			communicationStart := time.Now()
 
 			for communicationStart.Add(communicationTimeout).After(time.Now()) {
 				fmt.Println("[SiM] Getting code base ...")
