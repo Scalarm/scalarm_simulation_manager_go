@@ -87,7 +87,7 @@ func (em *ExperimentManager) MarkSimulationRunAsComplete(simulationIndex int, ru
       }
 
       if statusVal, ok := emResponse["status"]; ok {
-        if statusVal.(string) != "ok" {
+        if statusVal.(string) != "ok" && statusVal.(string) != "preconditioned_failed" {
             if reasonVal, ok := emResponse["reason"]; ok {
                 return nil, errors.New(reasonVal.(string))
             }
