@@ -27,7 +27,7 @@ import (
 	"time"
 )
 
-const VERSION string = "15.06.1-alpha"
+const VERSION string = "2016.04.08-1"
 
 // Config file description - this should be provided by Experiment Manager in 'config.json'
 type SimulationManagerConfig struct {
