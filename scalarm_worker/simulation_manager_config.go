@@ -2,8 +2,8 @@ package scalarm_worker
 
 import "encoding/json"
 import (
-	"os"
 	"errors"
+	"os"
 )
 
 // Config file description - this should be provided by Experiment Manager in 'config.json'
@@ -16,13 +16,14 @@ type SimulationManagerConfig struct {
 	StartAt                string `json:"start_at"`
 	Timeout                int    `json:"timeout"`
 	ScalarmCertificatePath string `json:"scalarm_certificate_path"`
+	SimulationsLimit       int    `json:"simulations_limit"`
 	InsecureSSL            bool   `json:"insecure_ssl"`
 }
 
 func CreateSimulationManagerConfig(filePath string) (*SimulationManagerConfig, error) {
 	configFile, err := os.Open(filePath)
 	if err != nil {
-		return nil, errors.New("Could not open file " + filePath +".")
+		return nil, errors.New("Could not open file " + filePath + ".")
 	}
 
 	config := new(SimulationManagerConfig)
@@ -33,10 +34,13 @@ func CreateSimulationManagerConfig(filePath string) (*SimulationManagerConfig, e
 		return nil, errors.New("Incorrect JSON in the file.")
 	}
 
+	if config.SimulationsLimit <= 0 {
+		config.SimulationsLimit = -1
+	}
+
 	if config.Timeout <= 0 {
 		config.Timeout = 60
 	}
 
 	return config, nil
 }
-

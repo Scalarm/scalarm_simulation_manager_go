@@ -21,26 +21,15 @@ import (
 	"path/filepath"
 	// "runtime"
 	"container/list"
-	scalarm_worker "github.com/Scalarm/scalarm_simulation_manager_go/scalarm_worker"
+	"flag"
 	"math/rand"
 	"strings"
 	"time"
+
+	scalarm_worker "github.com/scalarm/scalarm_simulation_manager_go/scalarm_worker"
 )
 
-const VERSION string = "2016.04.08-1"
-
-// Config file description - this should be provided by Experiment Manager in 'config.json'
-type SimulationManagerConfig struct {
-	ExperimentId           string `json:"experiment_id"`
-	InformationServiceUrl  string `json:"information_service_url"`
-	ExperimentManagerUser  string `json:"experiment_manager_user"`
-	ExperimentManagerPass  string `json:"experiment_manager_pass"`
-	Development            bool   `json:"development"`
-	StartAt                string `json:"start_at"`
-	Timeout                int    `json:"timeout"`
-	ScalarmCertificatePath string `json:"scalarm_certificate_path"`
-	InsecureSSL            bool   `json:"insecure_ssl"`
-}
+const VERSION string = "2016.10.03-1"
 
 // Results structure - we send this back to Experiment Manager
 type SimulationRunResults struct {
@@ -314,6 +303,24 @@ func main() {
 		Fatal(err)
 	}
 
+	// TODO: use flags with options to override all config values
+	simulationsLimitPtr := flag.Int("simulations_limit", -1, "max number of simulation run to execute")
+	flag.Parse()
+
+	simulationsLimit := *simulationsLimitPtr
+
+	// use config json if simulations limit not provided in command line
+	if simulationsLimit == -1 {
+		simulationsLimit = config.SimulationsLimit
+	}
+
+	if simulationsLimit > 0 {
+		fmt.Printf("[SiM] Simulations limit set to %v\n", simulationsLimit)
+	}
+
+	if config.Timeout <= 0 {
+		config.Timeout = 60
+	}
 	communicationTimeout := time.Duration(config.Timeout) * time.Second
 
 	// -- HTTP client --
@@ -457,6 +464,7 @@ func main() {
 		}
 
 		// 4. main loop for getting simulation runs of an experiment
+		simulationsDone := 0
 		for {
 			nextSimulationFailed := true
 			communicationStart := time.Now()
@@ -716,6 +724,17 @@ func main() {
 			// 6. going to the root dir and moving
 			if err = rootDir.Chdir(); err != nil {
 				Fatal(err)
+			}
+
+			simulationsDone += 1
+
+			if simulationsLimit > 0 {
+				fmt.Printf("[SiM] Simulations done: %v/%v\n", simulationsDone, simulationsLimit)
+			}
+
+			if simulationsLimit > 0 && simulationsDone >= simulationsLimit {
+				fmt.Printf("[SiM] Exiting due to simulation runs limit (%v)\n", simulationsLimit)
+				os.Exit(1)
 			}
 		}
 	}
