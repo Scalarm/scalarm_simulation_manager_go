@@ -1,13 +1,13 @@
-package scalarm_worker
+package scalarmWorker
 
 import (
 	"fmt"
 	"io"
+	"math/rand"
+	"net/http"
 	"os"
 	"time"
-	"net/http"
-	"math/rand"
-//	"io/ioutil"
+	//	"io/ioutil"
 	"errors"
 )
 
@@ -19,7 +19,7 @@ type RequestInfo struct {
 }
 
 func Fatal(err error) {
-	fmt.Println("[Fatal error] %s\n", err.Error())
+	fmt.Printf("[Fatal error] %s\n", err.Error())
 	os.Exit(1)
 }
 

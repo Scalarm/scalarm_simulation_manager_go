@@ -1,4 +1,4 @@
-package scalarm_worker
+package scalarmWorker
 
 import (
 	"encoding/json"
@@ -16,10 +16,10 @@ import (
 func setupExperimentManager(config *SimulationManagerConfig, client *http.Client) ExperimentManager {
 	return ExperimentManager{
 		HttpClient:           client,
-		BaseUrls:              []string{"system.scalarm.com"},
+		BaseUrls:             []string{"system.scalarm.com"},
 		CommunicationTimeout: 5 * time.Second,
 		Config:               config,
-		ExperimentId:					"568e5bece138232e76000002"}
+		ExperimentId:         "568e5bece138232e76000002"}
 }
 
 // =========== =========== ===========
@@ -51,12 +51,12 @@ func TestExperimentManagerShouldAskForJsonFormatWhenRequestingNextSimulation(t *
 	// === THEN ===
 	if err != nil {
 		t.Errorf("Returned error should be nil, but it is '%v'", err)
-    return
+		return
 	}
 
-  if nextSimulationRunConfig["status"].(string) != "ok" {
+	if nextSimulationRunConfig["status"].(string) != "ok" {
 		t.Errorf("Returned next simulation run config is what we expected to be. Actual: %v, Expected: %v",
-		    nextSimulationRunConfig, "ok")
+			nextSimulationRunConfig, "ok")
 	}
 }
 
@@ -80,8 +80,8 @@ func TestExperimentManagerShouldAskForJsonFormatWhenSendingMarkAsComplete(t *tes
 
 	em := setupExperimentManager(getSimConfig(), getHttpClientMock(server.URL))
 	simRunResultJson, _ := json.Marshal(map[string]int{
-    "x": 1,
-  })
+		"x": 1,
+	})
 
 	simRunResult := url.Values{}
 	simRunResult.Set("status", "ok")
@@ -96,10 +96,10 @@ func TestExperimentManagerShouldAskForJsonFormatWhenSendingMarkAsComplete(t *tes
 	// === THEN ===
 	if err != nil {
 		t.Errorf("Returned error should be nil, but it is '%v'", err)
-    return
+		return
 	}
 
-  if resp["status"].(string) != "ok" {
+	if resp["status"].(string) != "ok" {
 		t.Errorf("Returned next simulation run config is what we expected to be. Actual: %v, Expected: %v",
 			resp, "ok")
 	}
@@ -116,8 +116,8 @@ func TestExperimentManagerShouldHandleHttpErrorsWhenSendingMarkAsComplete(t *tes
 
 	em := setupExperimentManager(getSimConfig(), getHttpClientMock(server.URL))
 	simRunResultJson, _ := json.Marshal(map[string]int{
-    "x": 1,
-  })
+		"x": 1,
+	})
 
 	simRunResult := url.Values{}
 	simRunResult.Set("status", "ok")
@@ -132,7 +132,7 @@ func TestExperimentManagerShouldHandleHttpErrorsWhenSendingMarkAsComplete(t *tes
 	// === THEN ===
 	if err == nil {
 		t.Errorf("Returned error should be 'Experiment manager response code: 500', but it is nil")
-    return
+		return
 	}
 }
 
@@ -146,8 +146,8 @@ func TestExperimentManagerShouldHandleScalarmErrorsWhenSendingMarkAsComplete(t *
 
 	em := setupExperimentManager(getSimConfig(), getHttpClientMock(server.URL))
 	simRunResultJson, _ := json.Marshal(map[string]int{
-    "x": 1,
-  })
+		"x": 1,
+	})
 
 	simRunResult := url.Values{}
 	simRunResult.Set("status", "ok")
@@ -157,18 +157,18 @@ func TestExperimentManagerShouldHandleScalarmErrorsWhenSendingMarkAsComplete(t *
 	// === WHEN ===
 	_, err := em.MarkSimulationRunAsComplete(1, simRunResult)
 
-  expectedError := "Something went wrong"
+	expectedError := "Something went wrong"
 
 	// === THEN ===
 	if err == nil {
 		t.Errorf("Returned error should be '%v', but it is %v", expectedError, err)
-    return
+		return
 	}
 
-  if err.Error() != expectedError {
-    t.Errorf("Returned error should be '%v', but it is %v", expectedError, err)
-    return
-  }
+	if err.Error() != expectedError {
+		t.Errorf("Returned error should be '%v', but it is %v", expectedError, err)
+		return
+	}
 }
 
 func TestExperimentManagerShouldHandleScalarmErrorsWithoutReasonsWhenSendingMarkAsComplete(t *testing.T) {
@@ -181,8 +181,8 @@ func TestExperimentManagerShouldHandleScalarmErrorsWithoutReasonsWhenSendingMark
 
 	em := setupExperimentManager(getSimConfig(), getHttpClientMock(server.URL))
 	simRunResultJson, _ := json.Marshal(map[string]int{
-    "x": 1,
-  })
+		"x": 1,
+	})
 
 	simRunResult := url.Values{}
 	simRunResult.Set("status", "ok")
@@ -192,16 +192,16 @@ func TestExperimentManagerShouldHandleScalarmErrorsWithoutReasonsWhenSendingMark
 	// === WHEN ===
 	_, err := em.MarkSimulationRunAsComplete(1, simRunResult)
 
-  expectedError := "Something went wrong but without any details"
+	expectedError := "Something went wrong but without any details"
 
 	// === THEN ===
 	if err == nil {
 		t.Errorf("Returned error should be '%v', but it is %v", expectedError, err)
-    return
+		return
 	}
 
-  if err.Error() != expectedError {
-    t.Errorf("Returned error should be '%v', but it is %v", expectedError, err)
-    return
-  }
+	if err.Error() != expectedError {
+		t.Errorf("Returned error should be '%v', but it is %v", expectedError, err)
+		return
+	}
 }

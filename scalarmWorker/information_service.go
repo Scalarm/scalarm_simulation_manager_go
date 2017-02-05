@@ -1,13 +1,13 @@
-package scalarm_worker
+package scalarmWorker
 
 import (
-	"net/http"
-	"errors"
-	"time"
-	"fmt"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io/ioutil"
+	"net/http"
 	"strconv"
+	"time"
 )
 
 type InformationService struct {

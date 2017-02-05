@@ -1,4 +1,4 @@
-package scalarm_worker
+package scalarmWorker
 
 import "testing"
 

@@ -1,11 +1,11 @@
-package scalarm_worker
+package scalarmWorker
 
 import (
-	"testing"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"testing"
 	"time"
 )
 
@@ -13,10 +13,10 @@ import (
 
 func setupInformationService(config *SimulationManagerConfig, client *http.Client) InformationService {
 	return InformationService{
-			HttpClient: client,
-			BaseUrl: "system.scalarm.com/information",
-			CommunicationTimeout: 10 * time.Second,
-			Config: config}
+		HttpClient:           client,
+		BaseUrl:              "system.scalarm.com/information",
+		CommunicationTimeout: 10 * time.Second,
+		Config:               config}
 }
 
 // =========== =========== ===========
@@ -137,18 +137,18 @@ func TestInformationServiceShouldErrorWhenIncorrectJSONInReturn(t *testing.T) {
 func TestInformationServiceShouldErrorNoServiceAvailable(t *testing.T) {
 	// === GIVEN ===
 	config := &SimulationManagerConfig{
-				ExperimentManagerUser: "user",
-				ExperimentManagerPass: "pass",
-				Development: true,
-			}
+		ExperimentManagerUser: "user",
+		ExperimentManagerPass: "pass",
+		Development:           true,
+	}
 
 	client := &http.Client{}
 
 	is := InformationService{
-				HttpClient: client,
-				BaseUrl: "someveryincorrecturl",
-				CommunicationTimeout: 5 * time.Second,
-				Config: config}
+		HttpClient:           client,
+		BaseUrl:              "someveryincorrecturl",
+		CommunicationTimeout: 5 * time.Second,
+		Config:               config}
 
 	// === WHEN ===
 	experimentManagers, err := is.GetExperimentManagers()

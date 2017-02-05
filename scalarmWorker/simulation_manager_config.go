@@ -1,7 +1,7 @@
-package scalarm_worker
+package scalarmWorker
 
-import "encoding/json"
 import (
+	"encoding/json"
 	"errors"
 	"os"
 )
