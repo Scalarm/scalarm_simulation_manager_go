@@ -13,7 +13,7 @@ import (
 func TestSimRunShouldRunSimulationsFromExperiment(t *testing.T) {
 	// === GIVEN ===
 	os.RemoveAll("./experiment_1")
-	// defer os.RemoveAll("./experiment_1")
+	defer os.RemoveAll("./experiment_1")
 
 	allSimulationsSent := false
 
@@ -94,7 +94,7 @@ func TestSimRunShouldRunSimulationsFromExperiment(t *testing.T) {
 	wd, _ := os.Getwd()
 
 	sim := SimulationManager{
-		Config:      config,
+		Config:      &config,
 		HttpClient:  &http.Client{Transport: transport},
 		RootDirPath: wd,
 	}

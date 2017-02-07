@@ -56,7 +56,7 @@ func main() {
 
 	// 3. create simulation manager instance and run it
 
-	sim := SimulationManager{
+	sim := scalarmWorker.SimulationManager{
 		Config:      config,
 		HttpClient:  client,
 		RootDirPath: rootDirPath,

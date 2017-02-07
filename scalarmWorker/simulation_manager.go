@@ -22,7 +22,7 @@ import (
 )
 
 type SimulationManager struct {
-	Config      SimulationManagerConfig
+	Config      *SimulationManagerConfig
 	RootDirPath string
 	HttpClient  *http.Client
 }
@@ -151,7 +151,7 @@ func (sim SimulationManager) Run() {
 		HttpClient:           sim.HttpClient,
 		BaseUrl:              sim.Config.InformationServiceUrl,
 		CommunicationTimeout: communicationTimeout,
-		Config:               &sim.Config}
+		Config:               sim.Config}
 
 	var experimentManagers []string
 	experimentManagers, err := is.GetExperimentManagers()
@@ -204,7 +204,7 @@ func (sim SimulationManager) Run() {
 			HttpClient:           sim.HttpClient,
 			BaseUrls:             experimentManagers,
 			CommunicationTimeout: communicationTimeout,
-			Config:               &sim.Config,
+			Config:               sim.Config,
 			ExperimentId:         experimentId}
 
 		if err = os.MkdirAll(experimentDir, 0777); err != nil {
@@ -583,7 +583,7 @@ func (sim SimulationManager) IntermediateMonitoring(messages chan struct{}, fini
 		HttpClient:           client,
 		BaseUrls:             experimentManagers,
 		CommunicationTimeout: communicationTimeout,
-		Config:               &sim.Config,
+		Config:               sim.Config,
 		ExperimentId:         experimentId}
 
 	if _, err := os.Stat(path.Join(codeBaseDir, "progress_monitor")); err == nil {
