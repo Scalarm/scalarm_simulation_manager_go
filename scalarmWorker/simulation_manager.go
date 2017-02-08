@@ -313,12 +313,12 @@ func (sim SimulationManager) Run() {
 				}
 			}
 
-			simulation_index := int(simulationRun["simulation_id"].(float64))
+			simulationIndex := int(simulationRun["simulation_id"].(float64))
 
-			fmt.Printf("[SiM] Simulation index: %v\n", simulation_index)
+			fmt.Printf("[SiM] Simulation index: %v\n", simulationIndex)
 			fmt.Printf("[SiM] Simulation execution constraints: %v\n", simulationRun["execution_constraints"])
 
-			simulationDirPath := path.Join(experimentDir, fmt.Sprintf("simulation_%v", simulation_index))
+			simulationDirPath := path.Join(experimentDir, fmt.Sprintf("simulation_%v", simulationIndex))
 
 			err = os.MkdirAll(simulationDirPath, 0777)
 			if err != nil {
@@ -359,10 +359,10 @@ func (sim SimulationManager) Run() {
 				fmt.Println("[SiM] After input writer ...")
 			}
 
-			// 4c.1. progress monitoring scheduling if available - TODO
+			// 4c.1. progress monitoring scheduling if available
 			messages := make(chan struct{}, 1)
 			finished := make(chan struct{}, 1)
-			go sim.IntermediateMonitoring(messages, finished, codeBaseDir, experimentManagers, simulation_index, simulationDirPath, sim.HttpClient, experimentID)
+			go sim.IntermediateMonitoring(messages, finished, codeBaseDir, experimentManagers, simulationIndex, simulationDirPath, sim.HttpClient, experimentID)
 
 			// 4c. run an executor of this simulation
 			fmt.Println("[SiM] Before executor ...")
@@ -378,7 +378,7 @@ func (sim SimulationManager) Run() {
 			}
 
 			pid := executorCmd.Process.Pid
-			RunProcessMonitoring(pid, &sim, &em, simulation_index)
+			RunProcessMonitoring(pid, &sim, &em, simulationIndex)
 
 			if err = executorCmd.Wait(); err != nil {
 				fmt.Println("[SiM] An error occurred during 'executor' execution.")
@@ -452,7 +452,7 @@ func (sim SimulationManager) Run() {
 
 			fmt.Printf("[SiM] Results: %v\n", data)
 
-			_, err = em.MarkSimulationRunAsComplete(simulation_index, data)
+			_, err = em.MarkSimulationRunAsComplete(simulationIndex, data)
 			if err != nil {
 				fmt.Println("[SiM] Error during marking simulation run as complete.")
 				Fatal(err)
@@ -482,7 +482,7 @@ func (sim SimulationManager) Run() {
 					Fatal(err)
 				}
 
-				binariesUploadUrl := fmt.Sprintf("experiments/%s/simulations/%v", experimentID, simulation_index)
+				binariesUploadUrl := fmt.Sprintf("experiments/%s/simulations/%v", experimentID, simulationIndex)
 				binariesUploadUrlInfo := RequestInfo{"PUT", requestBody, writer.FormDataContentType(), binariesUploadUrl}
 				body := sim.ExecuteScalarmRequest(binariesUploadUrlInfo, storageManagers, sim.HttpClient, communicationTimeout)
 
@@ -512,7 +512,7 @@ func (sim SimulationManager) Run() {
 					Fatal(err)
 				}
 
-				stdoutUploadUrl := fmt.Sprintf("experiments/%s/simulations/%v/stdout", experimentID, simulation_index)
+				stdoutUploadUrl := fmt.Sprintf("experiments/%s/simulations/%v/stdout", experimentID, simulationIndex)
 				stdoutUploadUrlInfo := RequestInfo{"PUT", requestBody, writer.FormDataContentType(), stdoutUploadUrl}
 				body := sim.ExecuteScalarmRequest(stdoutUploadUrlInfo, storageManagers, sim.HttpClient, communicationTimeout)
 
