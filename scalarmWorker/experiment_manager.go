@@ -172,3 +172,41 @@ func (em *ExperimentManager) PostProgressInfo(simulationIndex int, results url.V
 
 	return nil
 }
+
+func (em *ExperimentManager) ReportHostInfo(simulationIndex int, hostInfo *HostInfo) error {
+	jsonStr, _ := json.Marshal(hostInfo)
+	url := "experiments/" + em.ExperimentId + "/simulations/" + strconv.Itoa(simulationIndex) + "/host_info"
+	reqInfo := RequestInfo{"POST", strings.NewReader(string(jsonStr)), "application/json", url}
+
+	resp, err := ExecuteScalarmRequest(reqInfo, em.BaseUrls, em.Config, em.HttpClient, em.CommunicationTimeout)
+	defer resp.Body.Close()
+
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != 200 {
+		return errors.New("Experiment manager response code: " + strconv.Itoa(resp.StatusCode))
+	}
+
+	return nil
+}
+
+func (em *ExperimentManager) ReportPerformanceStats(simulationIndex int, perfStats *PerformanceStats) error {
+	jsonStr, _ := json.Marshal(perfStats)
+	url := "experiments/" + em.ExperimentId + "/simulations/" + strconv.Itoa(simulationIndex) + "/performance_stats"
+	reqInfo := RequestInfo{"POST", strings.NewReader(string(jsonStr)), "application/json", url}
+
+	resp, err := ExecuteScalarmRequest(reqInfo, em.BaseUrls, em.Config, em.HttpClient, em.CommunicationTimeout)
+	defer resp.Body.Close()
+
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != 200 {
+		return errors.New("Experiment manager response code: " + strconv.Itoa(resp.StatusCode))
+	}
+
+	return nil
+}

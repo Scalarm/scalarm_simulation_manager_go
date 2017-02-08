@@ -55,7 +55,6 @@ func main() {
 	client = &http.Client{Transport: &http.Transport{TLSClientConfig: &tlsConfig}}
 
 	// 3. create simulation manager instance and run it
-
 	sim := scalarmWorker.SimulationManager{
 		Config:      config,
 		HttpClient:  client,

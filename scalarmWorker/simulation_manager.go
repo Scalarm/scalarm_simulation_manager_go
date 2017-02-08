@@ -70,7 +70,6 @@ func getWithTimeout(client *http.Client, request *http.Request, communicationTim
 }
 
 func (sim SimulationManager) ExecuteScalarmRequest(reqInfo RequestInfo, serviceUrls []string, client *http.Client, timeout time.Duration) []byte {
-
 	protocol := "https"
 	if sim.Config.Development {
 		protocol = "http"
@@ -81,9 +80,9 @@ func (sim SimulationManager) ExecuteScalarmRequest(reqInfo RequestInfo, serviceU
 
 	for _, v := range perm {
 		// 2. get next service url and prepare a request
-		serviceUrl := serviceUrls[v]
-		fmt.Printf("[SiM] %s://%s/%s\n", protocol, serviceUrl, reqInfo.ServiceMethod)
-		req, err := http.NewRequest(reqInfo.HttpMethod, fmt.Sprintf("%s://%s/%s", protocol, serviceUrl, reqInfo.ServiceMethod), reqInfo.Body)
+		serviceURL := serviceUrls[v]
+		fmt.Printf("[SiM] %s://%s/%s\n", protocol, serviceURL, reqInfo.ServiceMethod)
+		req, err := http.NewRequest(reqInfo.HttpMethod, fmt.Sprintf("%s://%s/%s", protocol, serviceURL, reqInfo.ServiceMethod), reqInfo.Body)
 		if err != nil {
 			Fatal(err)
 		}
@@ -103,9 +102,9 @@ func (sim SimulationManager) ExecuteScalarmRequest(reqInfo RequestInfo, serviceU
 	return nil
 }
 
-// Makes request to experiments/random_experiment
+// GetRandomExperimentID Makes request to experiments/random_experiment
 // Returns String: random experiment id available for current user
-func (sim SimulationManager) GetRandomExperimentId(experimentManagers []string, client *http.Client) string {
+func (sim SimulationManager) GetRandomExperimentID(experimentManagers []string, client *http.Client) string {
 	communicationTimeout := 30 * time.Second
 	fmt.Printf("[SiM] Getting random experiment id...\n")
 	getExpReqInfo := RequestInfo{"GET", nil, "", "experiments/random_experiment"}
@@ -134,6 +133,10 @@ func (sim SimulationManager) Run() {
 		sim.Config.Timeout = 60
 	}
 	communicationTimeout := time.Duration(sim.Config.Timeout) * time.Second
+
+	if sim.Config.CooldownInterval <= 0 {
+		sim.Config.CooldownInterval = 5
+	}
 
 	if len(sim.Config.StartAt) > 0 {
 		startTime, err := time.Parse(time.RFC3339, sim.Config.StartAt)
@@ -166,46 +169,46 @@ func (sim SimulationManager) Run() {
 		Fatal(err)
 	}
 
-	var experimentId string
+	var experimentID string
 	executedExperiments := list.New()
 	singleExperiment := false
 	// a great loop for multiple experiments
 	for {
 		// get experiment_id from EM if not present in SiM sim.Config
 		if sim.Config.ExperimentId == "" {
-			experimentId = ""
-			for experimentId == "" {
-				experimentId = sim.GetRandomExperimentId(experimentManagers, sim.HttpClient)
+			experimentID = ""
+			for experimentID == "" {
+				experimentID = sim.GetRandomExperimentID(experimentManagers, sim.HttpClient)
 
-				if experimentId == "" {
+				if experimentID == "" {
 					fmt.Printf("[SiM] Random experiment id empty, waiting 30 seconds to try again\n")
 					time.Sleep(30 * time.Second)
 
 					// check if this experiment was executed by this SiM
-				} else if listIncludeString(executedExperiments, experimentId) {
+				} else if listIncludeString(executedExperiments, experimentID) {
 					fmt.Printf("[SiM] That experiment was already executed, waiting 10 seconds to get other id\n")
-					experimentId = ""
+					experimentID = ""
 					time.Sleep(10 * time.Second)
 
 					// its new experiment - add it to executed list
 				} else {
-					executedExperiments.PushBack(experimentId)
+					executedExperiments.PushBack(experimentID)
 				}
 			}
 		} else {
-			experimentId = sim.Config.ExperimentId
+			experimentID = sim.Config.ExperimentId
 			singleExperiment = true
 		}
 
 		// creating directory for experiment data
-		experimentDir := path.Join(sim.RootDirPath, fmt.Sprintf("experiment_%s", experimentId))
+		experimentDir := path.Join(sim.RootDirPath, fmt.Sprintf("experiment_%s", experimentID))
 
 		em := ExperimentManager{
 			HttpClient:           sim.HttpClient,
 			BaseUrls:             experimentManagers,
 			CommunicationTimeout: communicationTimeout,
 			Config:               sim.Config,
-			ExperimentId:         experimentId}
+			ExperimentId:         experimentID}
 
 		if err = os.MkdirAll(experimentDir, 0777); err != nil {
 			Fatal(err)
@@ -243,7 +246,7 @@ func (sim SimulationManager) Run() {
 				if err == nil {
 					break
 				} else {
-					time.Sleep(5 * time.Second)
+					time.Sleep(time.Duration(sim.Config.CooldownInterval) * time.Second)
 				}
 			}
 
@@ -261,19 +264,19 @@ func (sim SimulationManager) Run() {
 			nextSimulationFailed := true
 			communicationStart := time.Now()
 
-			var simulation_run map[string]interface{}
+			var simulationRun map[string]interface{}
 			wait := false
 
 			// 4.a getting input values for next simulation run
 			for communicationStart.Add(communicationTimeout * time.Duration(len(experimentManagers))).After(time.Now()) {
 				fmt.Println("[SiM] Getting next simulation run ...")
-				simulation_run, err = em.GetNextSimulationRunConfig()
+				simulationRun, err = em.GetNextSimulationRunConfig()
 
 				if err != nil {
 					Fatal(err)
 				}
 
-				status := simulation_run["status"].(string)
+				status := simulationRun["status"].(string)
 
 				if status == "all_sent" {
 					fmt.Println("[SiM] There is no more simulations to run in this experiment.")
@@ -281,7 +284,7 @@ func (sim SimulationManager) Run() {
 					fmt.Println("[SiM] An error occurred while getting next simulation.")
 				} else if status == "wait" {
 					fmt.Printf("[SiM] There is no more simulations to run in this experiment "+
-						"at the moment, time to wait: %vs\n", simulation_run["duration_in_seconds"])
+						"at the moment, time to wait: %vs\n", simulationRun["duration_in_seconds"])
 					wait = true
 					break
 				} else if status != "ok" {
@@ -292,10 +295,10 @@ func (sim SimulationManager) Run() {
 				}
 
 				fmt.Println("[SiM] There was a problem while getting next simulation to run.")
-				time.Sleep(5 * time.Second)
+				time.Sleep(time.Duration(sim.Config.CooldownInterval) * time.Second)
 			}
 			if wait {
-				time.Sleep(time.Duration(simulation_run["duration_in_seconds"].(float64)) * time.Second)
+				time.Sleep(time.Duration(simulationRun["duration_in_seconds"].(float64)) * time.Second)
 				continue
 			}
 
@@ -303,17 +306,17 @@ func (sim SimulationManager) Run() {
 				fmt.Println("[SiM] Couldn't get simulation to run")
 				if singleExperiment {
 					fmt.Println("[SiM] that was single experiment run -> finishing work.")
-					os.Exit(0)
+					return
 				} else {
 					fmt.Println("[SiM] will try another experiment")
 					break
 				}
 			}
 
-			simulation_index := int(simulation_run["simulation_id"].(float64))
+			simulation_index := int(simulationRun["simulation_id"].(float64))
 
 			fmt.Printf("[SiM] Simulation index: %v\n", simulation_index)
-			fmt.Printf("[SiM] Simulation execution constraints: %v\n", simulation_run["execution_constraints"])
+			fmt.Printf("[SiM] Simulation execution constraints: %v\n", simulationRun["execution_constraints"])
 
 			simulationDirPath := path.Join(experimentDir, fmt.Sprintf("simulation_%v", simulation_index))
 
@@ -322,9 +325,9 @@ func (sim SimulationManager) Run() {
 				Fatal(err)
 			}
 
-			input_parameters, _ := json.Marshal(simulation_run["input_parameters"].(map[string]interface{}))
+			inputParameters, _ := json.Marshal(simulationRun["input_parameters"].(map[string]interface{}))
 
-			err = ioutil.WriteFile(path.Join(simulationDirPath, "input.json"), input_parameters, 0777)
+			err = ioutil.WriteFile(path.Join(simulationDirPath, "input.json"), inputParameters, 0777)
 			if err != nil {
 				Fatal(err)
 			}
@@ -339,7 +342,6 @@ func (sim SimulationManager) Run() {
 			if err = simulationDir.Chdir(); err != nil {
 				Fatal(err)
 			}
-			wd, err = os.Getwd()
 
 			// 4b. run an adapter script (input writer) for input information: input.json -> some specific code
 			if _, err := os.Stat(path.Join(codeBaseDir, "input_writer")); err == nil {
@@ -360,24 +362,13 @@ func (sim SimulationManager) Run() {
 			// 4c.1. progress monitoring scheduling if available - TODO
 			messages := make(chan struct{}, 1)
 			finished := make(chan struct{}, 1)
-			go sim.IntermediateMonitoring(messages, finished, codeBaseDir, experimentManagers, simulation_index, simulationDirPath, sim.HttpClient, experimentId)
+			go sim.IntermediateMonitoring(messages, finished, codeBaseDir, experimentManagers, simulation_index, simulationDirPath, sim.HttpClient, experimentID)
 
 			// 4c. run an executor of this simulation
-			// TODO: change is needed to include online monitoring
-			// executorCmd Process *os.Process
-			// cmd := exec.Command("sleep", "5")
-			// err := cmd.Start()
-			// if err != nil {
-			// 	log.Fatal(err)
-			// }
-			// log.Printf("Waiting for command to finish...")
-			// err = cmd.Wait()
-			// log.Printf("Command finished with error: %v", err)
-			// we need to check when the process is stopped
 			fmt.Println("[SiM] Before executor ...")
 			executorCmd := exec.Command("sh", "-c", path.Join(codeBaseDir, "executor >>_stdout.txt 2>&1"))
 			executorCmd.Dir = simulationDirPath
-			if err = executorCmd.Run(); err != nil {
+			if err = executorCmd.Start(); err != nil {
 				fmt.Println("[SiM] An error occurred during 'executor' execution.")
 				fmt.Println("[SiM] Please check if 'executor' executes correctly on the selected infrastructure.")
 				fmt.Printf("[Fatal error] occured during '%v' execution \n", strings.Join(executorCmd.Args, " "))
@@ -385,6 +376,19 @@ func (sim SimulationManager) Run() {
 				PrintStdoutLog()
 				os.Exit(1)
 			}
+
+			pid := executorCmd.Process.Pid
+			RunProcessMonitoring(pid, &sim, &em, simulation_index)
+
+			if err = executorCmd.Wait(); err != nil {
+				fmt.Println("[SiM] An error occurred during 'executor' execution.")
+				fmt.Println("[SiM] Please check if 'executor' executes correctly on the selected infrastructure.")
+				fmt.Printf("[Fatal error] occured during '%v' execution \n", strings.Join(executorCmd.Args, " "))
+				fmt.Printf("[Fatal error] %s\n", err.Error())
+				PrintStdoutLog()
+				os.Exit(1)
+			}
+
 			fmt.Println("[SiM] After executor ...")
 
 			messages <- struct{}{}
@@ -478,7 +482,7 @@ func (sim SimulationManager) Run() {
 					Fatal(err)
 				}
 
-				binariesUploadUrl := fmt.Sprintf("experiments/%s/simulations/%v", experimentId, simulation_index)
+				binariesUploadUrl := fmt.Sprintf("experiments/%s/simulations/%v", experimentID, simulation_index)
 				binariesUploadUrlInfo := RequestInfo{"PUT", requestBody, writer.FormDataContentType(), binariesUploadUrl}
 				body := sim.ExecuteScalarmRequest(binariesUploadUrlInfo, storageManagers, sim.HttpClient, communicationTimeout)
 
@@ -508,7 +512,7 @@ func (sim SimulationManager) Run() {
 					Fatal(err)
 				}
 
-				stdoutUploadUrl := fmt.Sprintf("experiments/%s/simulations/%v/stdout", experimentId, simulation_index)
+				stdoutUploadUrl := fmt.Sprintf("experiments/%s/simulations/%v/stdout", experimentID, simulation_index)
 				stdoutUploadUrlInfo := RequestInfo{"PUT", requestBody, writer.FormDataContentType(), stdoutUploadUrl}
 				body := sim.ExecuteScalarmRequest(stdoutUploadUrlInfo, storageManagers, sim.HttpClient, communicationTimeout)
 
@@ -534,7 +538,7 @@ func (sim SimulationManager) Run() {
 				Fatal(err)
 			}
 
-			simulationsDone += 1
+			simulationsDone++
 
 			if simulationsLimit > 0 {
 				fmt.Printf("[SiM] Simulations done: %v/%v\n", simulationsDone, simulationsLimit)
@@ -571,87 +575,6 @@ func PrintStdoutLog() {
 	out, _ := exec.Command("tail", "-n", linesNum, stdoutPath).CombinedOutput()
 	fmt.Printf("----------\nLast %v lines of %v:\n----------\n", linesNum, stdoutPath)
 	fmt.Println(string(out))
-}
-
-// this method executes progress monitor of a simulation run and stops when it gets a signal from the main thread
-func (sim SimulationManager) IntermediateMonitoring(messages chan struct{}, finished chan struct{}, codeBaseDir string, experimentManagers []string, simIndex int,
-	simulationDirPath string, client *http.Client, experimentId string) {
-
-	communicationTimeout := 30 * time.Second
-
-	em := ExperimentManager{
-		HttpClient:           client,
-		BaseUrls:             experimentManagers,
-		CommunicationTimeout: communicationTimeout,
-		Config:               sim.Config,
-		ExperimentId:         experimentId}
-
-	if _, err := os.Stat(path.Join(codeBaseDir, "progress_monitor")); err == nil {
-		for {
-			progressMonitorCmd := exec.Command("sh", "-c", path.Join(codeBaseDir, "progress_monitor >>_stdout.txt 2>&1"))
-			progressMonitorCmd.Dir = simulationDirPath
-
-			if err = progressMonitorCmd.Run(); err != nil {
-				fmt.Println("[SiM] An error occurred during 'progress_monitor' execution.")
-				fmt.Println("[SiM] Please check if 'progress_monitor' executes correctly on the selected infrastructure.")
-				fmt.Printf("[Fatal error] occured during '%v' execution \n", strings.Join(progressMonitorCmd.Args, " "))
-				fmt.Printf("[Fatal error] %s\n", err.Error())
-				PrintStdoutLog()
-				os.Exit(1)
-			}
-
-			intermediateResults := new(SimulationRunResults)
-
-			if _, err := os.Stat("intermediate_result.json"); os.IsNotExist(err) {
-				intermediateResults.Status = "error"
-				intermediateResults.Reason = fmt.Sprintf("No 'intermediate_result.json' file found: %s", err.Error())
-			} else {
-				file, err := os.Open("intermediate_result.json")
-
-				if err != nil {
-					intermediateResults.Status = "error"
-					intermediateResults.Reason = fmt.Sprintf("Could not open 'intermediate_result.json': %s", err.Error())
-				} else {
-					err = json.NewDecoder(file).Decode(&intermediateResults)
-
-					if err != nil {
-						intermediateResults.Status = "error"
-						intermediateResults.Reason = fmt.Sprintf("Error during 'intermediate_result.json' parsing: %s", err.Error())
-					}
-				}
-
-				file.Close()
-			}
-
-			if intermediateResults.Status == "ok" {
-				data := url.Values{}
-				data.Set("status", intermediateResults.Status)
-				data.Add("reason", intermediateResults.Reason)
-				b, _ := json.Marshal(intermediateResults.Results)
-				data.Add("result", string(b))
-
-				fmt.Printf("[SiM][progress_info] Results: %v\n", data)
-
-				err = em.PostProgressInfo(simIndex, data)
-
-				if err != nil {
-					Fatal(err)
-				}
-			}
-
-			time.Sleep(10 * time.Second)
-			select {
-			case _ = <-messages:
-				fmt.Printf("[SiM][progress_info] Our work is finished\n")
-				finished <- struct{}{}
-				return
-			default:
-			}
-		}
-	} else {
-		fmt.Printf("[SiM][progress_info] There is no progress monitor script\n")
-		finished <- struct{}{}
-	}
 }
 
 func cloneZipItem(f *zip.File, dest string) error {

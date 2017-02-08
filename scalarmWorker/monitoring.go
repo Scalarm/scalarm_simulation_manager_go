@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	pscpu "github.com/shirou/gopsutil/cpu"
 	pshost "github.com/shirou/gopsutil/host"
@@ -17,6 +18,18 @@ type PsUtil struct {
 	getIoStats     func(process *psproc.Process) (*psproc.IOCountersStat, error)
 	getMemoryStats func(process *psproc.Process) (*psproc.MemoryInfoStat, error)
 	getCPUTimes    func(process *psproc.Process) (*pscpu.TimesStat, error)
+}
+
+func GetIOStats(process *psproc.Process) (*psproc.IOCountersStat, error) {
+	return process.IOCounters()
+}
+
+func GetMemoryStats(process *psproc.Process) (*psproc.MemoryInfoStat, error) {
+	return process.MemoryInfo()
+}
+
+func GetCPUTimes(process *psproc.Process) (*pscpu.TimesStat, error) {
+	return process.Times()
 }
 
 // HostInfo contains essential information about the host on which SiM is running
@@ -37,6 +50,7 @@ type HostInfo struct {
 	Mhz                  float64  `json:"mhz"`
 	CacheSize            int32    `json:"cacheSize"`
 	Flags                []string `json:"flags"`
+	Timestamp            int64    `json:"timestamp"`
 }
 
 // ExtractHostInfo Extract information about host on which the sim is running
@@ -48,6 +62,8 @@ func ExtractHostInfo(ps *PsUtil) (*HostInfo, error) {
 		fmt.Printf("[pscpu.Info()] error: %v,\n", err)
 		return nil, err
 	}
+
+	info.Timestamp = time.Now().Unix()
 
 	info.Cores = len(coreStats)
 	info.VendorID = coreStats[0].VendorID
@@ -78,6 +94,8 @@ func ExtractHostInfo(ps *PsUtil) (*HostInfo, error) {
 
 // PerformanceStats keeps basic performance-related information
 type PerformanceStats struct {
+	Timestamp int64 `json:"timestamp"`
+
 	Utime  float64 `json:"utime"`
 	Stime  float64 `json:"stime"`
 	Iowait float64 `json:"iowait"`
@@ -123,6 +141,7 @@ func ExtractPerformanceStats(pid int, ps *PsUtil) (*PerformanceStats, error) {
 	}
 
 	perfStats := new(PerformanceStats)
+	perfStats.Timestamp = time.Now().Unix()
 
 	ioStats, err := ps.getIoStats(process)
 	if err != nil {
@@ -144,4 +163,45 @@ func ExtractPerformanceStats(pid int, ps *PsUtil) (*PerformanceStats, error) {
 	extractTimes(perfStats, cpuStats)
 
 	return perfStats, nil
+}
+
+func RunProcessMonitoring(pid int, sim *SimulationManager, em *ExperimentManager, simulationIndex int) {
+	ps := PsUtil{
+		getHostInfo:    pshost.Info,
+		getCPUInfo:     pscpu.Info,
+		getCPUTimes:    GetCPUTimes,
+		getIoStats:     GetIOStats,
+		getMemoryStats: GetMemoryStats,
+	}
+
+	hostInfo, err := ExtractHostInfo(&ps)
+	if err != nil {
+		fmt.Printf("[SiM] Could not extract host info - %v\n", err)
+		return
+	}
+
+	err = em.ReportHostInfo(simulationIndex, hostInfo)
+	if err != nil {
+		fmt.Printf("[SiM] An error occurred during 'ReportHostInfo' - %v\n", err)
+	}
+
+	if sim.Config.MonitoringInterval > 0 {
+		pidExist, pidCheckErr := psproc.PidExists(int32(pid))
+
+		for pidExist && pidCheckErr == nil {
+			performanceStats, err := ExtractPerformanceStats(pid, &ps)
+			if err != nil {
+				fmt.Printf("[SiM] Could not extract performance statistics - %v\n", err)
+				return
+			}
+
+			err = em.ReportPerformanceStats(simulationIndex, performanceStats)
+			if err != nil {
+				fmt.Printf("[SiM] An error occurred during 'ReportPerformanceStats' - %v\n", err)
+			}
+
+			time.Sleep(time.Duration(sim.Config.MonitoringInterval) * time.Second)
+			pidExist, pidCheckErr = psproc.PidExists(int32(pid))
+		}
+	}
 }

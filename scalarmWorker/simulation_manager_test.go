@@ -14,11 +14,12 @@ func TestSimRunShouldRunSimulationsFromExperiment(t *testing.T) {
 	// === GIVEN ===
 	os.RemoveAll("./experiment_1")
 	defer os.RemoveAll("./experiment_1")
-
+	hostInfoSent := false
+	performanceStatsSent := false
 	allSimulationsSent := false
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Printf("Responding to: %v\n", r.URL.Path)
+		//fmt.Printf("Responding to: %v\n", r.URL.Path)
 
 		if r.URL.Path == "/information/experiment_managers" || r.URL.Path == "/information/storage_managers" {
 			w.WriteHeader(200)
@@ -63,7 +64,13 @@ func TestSimRunShouldRunSimulationsFromExperiment(t *testing.T) {
 				}
 			}
 
-		} else if r.URL.Path == "/experiments/1/simulations/1/stdout" {
+		} else if r.URL.Path == "/experiments/1/simulations/1/stdout" && r.Method == "POST" {
+			w.WriteHeader(200)
+		} else if r.URL.Path == "/experiments/1/simulations/1/host_info" && r.Method == "POST" {
+			hostInfoSent = true
+			w.WriteHeader(200)
+		} else if r.URL.Path == "/experiments/1/simulations/1/performance_stats" && r.Method == "POST" {
+			performanceStatsSent = true
 			w.WriteHeader(200)
 		} else {
 			w.WriteHeader(500)
@@ -75,7 +82,7 @@ func TestSimRunShouldRunSimulationsFromExperiment(t *testing.T) {
 	// Make a transport that reroutes all traffic to the example server
 	transport := &http.Transport{
 		Proxy: func(req *http.Request) (*url.URL, error) {
-			fmt.Printf("Calling: %v\n", req.URL.Path)
+			//fmt.Printf("Calling: %v\n", req.URL.Path)
 			return url.Parse(server.URL + "" + req.URL.Path)
 		},
 	}
@@ -86,9 +93,11 @@ func TestSimRunShouldRunSimulationsFromExperiment(t *testing.T) {
 		ExperimentManagerUser:  "user",
 		ExperimentManagerPass:  "pass",
 		Development:            true,
-		Timeout:                30,
+		Timeout:                2,
 		ScalarmCertificatePath: "",
 		InsecureSSL:            true,
+		MonitoringInterval:     1,
+		CooldownInterval:       1,
 	}
 
 	wd, _ := os.Getwd()
@@ -100,4 +109,12 @@ func TestSimRunShouldRunSimulationsFromExperiment(t *testing.T) {
 	}
 
 	sim.Run()
+
+	if !hostInfoSent {
+		t.Errorf("Host information has not been sent")
+	}
+
+	if !performanceStatsSent {
+		t.Errorf("Performance information has not been sent")
+	}
 }

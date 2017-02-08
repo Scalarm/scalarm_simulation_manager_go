@@ -18,6 +18,8 @@ type SimulationManagerConfig struct {
 	ScalarmCertificatePath string `json:"scalarm_certificate_path"`
 	SimulationsLimit       int    `json:"simulations_limit"`
 	InsecureSSL            bool   `json:"insecure_ssl"`
+	MonitoringInterval     int    `json:"monitoring_interval"`
+	CooldownInterval       int    `json:"cooldown_interval"`
 }
 
 func CreateSimulationManagerConfig(filePath string) (*SimulationManagerConfig, error) {
