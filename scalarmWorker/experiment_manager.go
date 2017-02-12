@@ -116,10 +116,13 @@ func (em *ExperimentManager) DownloadExperimentCodeBase(codeBaseDir string) erro
 	}
 	defer w.Close()
 
-	codeBaseUrl := "experiments/" + em.ExperimentId + "/code_base"
-	codeBaseInfo := RequestInfo{"GET", nil, "", codeBaseUrl}
+	codeBaseURL := "experiments/" + em.ExperimentId + "/code_base"
+	codeBaseInfo := RequestInfo{"GET", nil, "", codeBaseURL}
 
 	resp, err := ExecuteScalarmRequest(codeBaseInfo, em.BaseUrls, em.Config, em.HttpClient, em.CommunicationTimeout)
+	if err != nil {
+		return err
+	}
 
 	responseBody, err = ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -175,8 +178,11 @@ func (em *ExperimentManager) PostProgressInfo(simulationIndex int, results url.V
 
 func (em *ExperimentManager) ReportHostInfo(simulationIndex int, hostInfo *HostInfo) error {
 	jsonStr, _ := json.Marshal(hostInfo)
+	requestData := url.Values{}
+	requestData.Set("host_info", string(jsonStr))
+
 	url := "experiments/" + em.ExperimentId + "/simulations/" + strconv.Itoa(simulationIndex) + "/host_info"
-	reqInfo := RequestInfo{"POST", strings.NewReader(string(jsonStr)), "application/json", url}
+	reqInfo := RequestInfo{"POST", strings.NewReader(requestData.Encode()), "application/x-www-form-urlencoded", url}
 
 	resp, err := ExecuteScalarmRequest(reqInfo, em.BaseUrls, em.Config, em.HttpClient, em.CommunicationTimeout)
 	defer resp.Body.Close()
@@ -194,8 +200,11 @@ func (em *ExperimentManager) ReportHostInfo(simulationIndex int, hostInfo *HostI
 
 func (em *ExperimentManager) ReportPerformanceStats(simulationIndex int, perfStats *PerformanceStats) error {
 	jsonStr, _ := json.Marshal(perfStats)
+	requestData := url.Values{}
+	requestData.Set("stats", string(jsonStr))
+
 	url := "experiments/" + em.ExperimentId + "/simulations/" + strconv.Itoa(simulationIndex) + "/performance_stats"
-	reqInfo := RequestInfo{"POST", strings.NewReader(string(jsonStr)), "application/json", url}
+	reqInfo := RequestInfo{"POST", strings.NewReader(requestData.Encode()), "application/x-www-form-urlencoded", url}
 
 	resp, err := ExecuteScalarmRequest(reqInfo, em.BaseUrls, em.Config, em.HttpClient, em.CommunicationTimeout)
 	defer resp.Body.Close()

@@ -20,14 +20,17 @@ type PsUtil struct {
 	getCPUTimes    func(process *psproc.Process) (*pscpu.TimesStat, error)
 }
 
+// GetIOStats gets IO-related stats using psutils
 func GetIOStats(process *psproc.Process) (*psproc.IOCountersStat, error) {
 	return process.IOCounters()
 }
 
+// GetMemoryStats gets memory-related stats using psutils
 func GetMemoryStats(process *psproc.Process) (*psproc.MemoryInfoStat, error) {
 	return process.MemoryInfo()
 }
 
+// GetCPUTimes gets CPU-related stats using psutils
 func GetCPUTimes(process *psproc.Process) (*pscpu.TimesStat, error) {
 	return process.Times()
 }
@@ -105,12 +108,12 @@ type PerformanceStats struct {
 	Vms  uint64 `json:"vms"`
 	Swap uint64 `json:"swap"`
 
-	ReadCount  uint64 `json:"readCount"`
-	WriteCount uint64 `json:"writeCount"`
+	ReadCount  uint64 `json:"read_count"`
+	WriteCount uint64 `json:"write_count"`
 
 	// in bytes
-	ReadBytes  uint64 `json:"readBytes"`
-	WriteBytes uint64 `json:"writeBytes"`
+	ReadBytes  uint64 `json:"read_bytes"`
+	WriteBytes uint64 `json:"write_bytes"`
 }
 
 func extractTimes(stats *PerformanceStats, cpuInfo *pscpu.TimesStat) {
@@ -165,6 +168,7 @@ func ExtractPerformanceStats(pid int, ps *PsUtil) (*PerformanceStats, error) {
 	return perfStats, nil
 }
 
+// RunProcessMonitoring starts online process monitoring till process ends
 func RunProcessMonitoring(pid int, sim *SimulationManager, em *ExperimentManager, simulationIndex int) {
 	ps := PsUtil{
 		getHostInfo:    pshost.Info,
