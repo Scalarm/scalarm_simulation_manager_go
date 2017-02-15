@@ -150,7 +150,8 @@ func TestExtractPerformanceStatsShouldReturnFilledStructWhenNoErrorsOccur(t *tes
 	ps.getMemoryStats = fakeMemoryStats
 	ps.getIoStats = fakeIoCounters
 
-	perfStats, err := ExtractPerformanceStats(1, ps)
+	proc, _ := psproc.NewProcess(1)
+	perfStats, err := ExtractPerformanceStats(proc, ps)
 
 	if err != nil {
 		t.Errorf("Got: '%v' - Expected nil", err)
@@ -175,7 +176,8 @@ func TestExtractPerformanceStatsShouldReturnTimesErrorWhenTimeErrorsOccur(t *tes
 	ps.getMemoryStats = fakeMemoryStats
 	ps.getIoStats = fakeIoCounters
 
-	_, err := ExtractPerformanceStats(1, ps)
+	proc, _ := psproc.NewProcess(1)
+	_, err := ExtractPerformanceStats(proc, ps)
 
 	if err == nil {
 		t.Errorf("Got: 'nil' - Expected 'randomCPUError'")
@@ -192,7 +194,8 @@ func TestExtractPerformanceStatsShouldReturnMemErrorWhenMemErrorsOccur(t *testin
 	ps.getMemoryStats = fakeMemoryStatsWithError
 	ps.getIoStats = fakeIoCounters
 
-	_, err := ExtractPerformanceStats(1, ps)
+	proc, _ := psproc.NewProcess(1)
+	_, err := ExtractPerformanceStats(proc, ps)
 
 	if err == nil {
 		t.Errorf("Got: 'nil' - Expected 'randompMemoryError'")
@@ -209,7 +212,8 @@ func TestExtractPerformanceStatsShouldReturnIoErrorWhenIoErrorsOccur(t *testing.
 	ps.getMemoryStats = fakeMemoryStats
 	ps.getIoStats = fakeIoCountersWithError
 
-	_, err := ExtractPerformanceStats(1, ps)
+	proc, _ := psproc.NewProcess(1)
+	_, err := ExtractPerformanceStats(proc, ps)
 
 	if err == nil {
 		t.Errorf("Got: 'nil' - Expected 'randomIoError'")
@@ -220,13 +224,13 @@ func TestExtractPerformanceStatsShouldReturnIoErrorWhenIoErrorsOccur(t *testing.
 	}
 }
 
-func TestExtractPerformanceStatsShouldReturnErrorWhenNoProcessWaFound(t *testing.T) {
+func TestCollectPerformanceStatsShouldReturnErrorWhenNoProcessWaFound(t *testing.T) {
 	ps := new(PsUtil)
 	ps.getCPUTimes = fakeTimesStats
 	ps.getMemoryStats = fakeMemoryStats
 	ps.getIoStats = fakeIoCounters
 
-	_, err := ExtractPerformanceStats(32000, ps)
+	_, err := CollectPerformanceStats(32000, ps)
 
 	if err == nil {
 		t.Errorf("Got: 'nil' - Expected 'could not create a proc with id error'")

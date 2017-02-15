@@ -135,14 +135,60 @@ func extractIoInfo(stats *PerformanceStats, ioInfo *psproc.IOCountersStat) {
 	stats.WriteBytes = ioInfo.WriteBytes
 }
 
-// ExtractPerformanceStats reads resource consumption for the given pid
-func ExtractPerformanceStats(pid int, ps *PsUtil) (*PerformanceStats, error) {
+func collectChildrenProcesses(process *psproc.Process) []*psproc.Process {
+	processes := []*psproc.Process{}
+	children, err := process.Children()
+
+	if err == nil {
+		processes = append(processes, children...)
+		for _, child := range children {
+			processes = append(processes, collectChildrenProcesses(child)...)
+		}
+	}
+
+	return processes
+}
+
+func aggregateStats(stats1 *PerformanceStats, stats2 *PerformanceStats) *PerformanceStats {
+	stats1.Iowait += stats2.Iowait
+	stats1.ReadBytes += stats2.ReadBytes
+	stats1.ReadCount += stats2.ReadCount
+	stats1.Rss += stats2.Rss
+	stats1.Stime += stats2.Stime
+	stats1.Swap += stats2.Swap
+	stats1.Utime += stats2.Utime
+	stats1.Vms += stats2.Vms
+	stats1.WriteBytes += stats2.WriteBytes
+	stats1.WriteCount += stats2.WriteCount
+
+	return stats1
+}
+
+func CollectPerformanceStats(pid int, ps *PsUtil) (*PerformanceStats, error) {
 	process, err := psproc.NewProcess(int32(pid))
 
 	if err != nil {
 		return nil, errors.New("Could not create process with pid " + strconv.Itoa(pid))
 	}
 
+	stats, err := ExtractPerformanceStats(process, ps)
+	if err != nil {
+		return nil, errors.New("Could not extract performance stats for pid " + strconv.Itoa(pid))
+	}
+
+	childrenProcs := collectChildrenProcesses(process)
+	for _, childProc := range childrenProcs {
+		childStats, err := ExtractPerformanceStats(childProc, ps)
+		if err == nil {
+			stats = aggregateStats(stats, childStats)
+		}
+	}
+
+	return stats, nil
+}
+
+// ExtractPerformanceStats reads resource consumption for the given pid
+func ExtractPerformanceStats(process *psproc.Process, ps *PsUtil) (*PerformanceStats, error) {
 	perfStats := new(PerformanceStats)
 	perfStats.Timestamp = time.Now().Unix()
 
@@ -193,7 +239,7 @@ func RunProcessMonitoring(pid int, sim *SimulationManager, em *ExperimentManager
 		pidExist, pidCheckErr := psproc.PidExists(int32(pid))
 
 		for pidExist && pidCheckErr == nil {
-			performanceStats, err := ExtractPerformanceStats(pid, &ps)
+			performanceStats, err := CollectPerformanceStats(pid, &ps)
 			if err != nil {
 				fmt.Printf("[SiM] Could not extract performance statistics - %v\n", err)
 				return
