@@ -2,12 +2,48 @@ package scalarmWorker
 
 import (
 	"errors"
+	"os"
+	"os/exec"
 	"testing"
+	"time"
 
 	pscpu "github.com/shirou/gopsutil/cpu"
 	pshost "github.com/shirou/gopsutil/host"
 	psproc "github.com/shirou/gopsutil/process"
 )
+
+func realPs() PsUtil {
+	return PsUtil{
+		getCPUTimes:    GetCPUTimes,
+		getIoStats:     GetIOStats,
+		getMemoryStats: GetMemoryStats,
+	}
+}
+
+func startPerfTestScript(t *testing.T) *os.Process {
+	testScriptCmd := exec.Command("sh", "test_assets/perfStatsProc.sh", "0")
+	testScriptCmd.Start()
+	t.Logf("Perf script started - PID: %d", testScriptCmd.Process.Pid)
+
+	return testScriptCmd.Process
+}
+
+func killProcWithMaxPid(t *testing.T, procs map[int32]*PerformanceStats) {
+	var firstPid, maxPid int32
+
+	maxPid = 0
+
+	for firstPid = range procs {
+		if maxPid < firstPid {
+			maxPid = firstPid
+		}
+	}
+
+	t.Logf("Killing process with pid %d", maxPid)
+
+	proc := os.Process{Pid: int(maxPid)}
+	proc.Kill()
+}
 
 func fakeHostInfo() (*pshost.InfoStat, error) {
 	return &pshost.InfoStat{
@@ -80,6 +116,13 @@ func fakeTimesStats(process *psproc.Process) (*pscpu.TimesStat, error) {
 
 func fakeTimesStatsWithError(process *psproc.Process) (*pscpu.TimesStat, error) {
 	return nil, errors.New("randomCPUError")
+}
+
+func killProcs(processes map[int32]*PerformanceStats) {
+	for pid := range processes {
+		proc := os.Process{Pid: int(pid)}
+		proc.Kill()
+	}
 }
 
 // ACTUAL TESTS
@@ -224,7 +267,7 @@ func TestExtractPerformanceStatsShouldReturnIoErrorWhenIoErrorsOccur(t *testing.
 	}
 }
 
-func TestCollectPerformanceStatsShouldReturnErrorWhenNoProcessWaFound(t *testing.T) {
+func TestCollectPerformanceStatsShouldReturnErrorWhenNoProcessWasFound(t *testing.T) {
 	ps := new(PsUtil)
 	ps.getCPUTimes = fakeTimesStats
 	ps.getMemoryStats = fakeMemoryStats
@@ -236,7 +279,83 @@ func TestCollectPerformanceStatsShouldReturnErrorWhenNoProcessWaFound(t *testing
 		t.Errorf("Got: 'nil' - Expected 'could not create a proc with id error'")
 	}
 
-	if err.Error() != "Could not create process with pid 32000" {
-		t.Errorf("Got: '%v' - Expected 'Could not create process with pid 32000'", err.Error())
+	expectedErrMsg := "Could not create process with pid 32000: open /proc/32000: no such file or directory"
+	if err.Error() != expectedErrMsg {
+		t.Errorf("Got: '%v' - Expected '%s'", err.Error(), expectedErrMsg)
+	}
+}
+
+func TestCollectPerformanceStatsShouldReturnMapOfPidsAndPerformanceStats(t *testing.T) {
+	ps := realPs()
+	scriptProc := startPerfTestScript(t)
+
+	stats, err := CollectPerformanceStats(scriptProc.Pid, &ps)
+	defer killProcs(stats)
+
+	if err != nil {
+		t.Errorf("Got: '%v' - Expected nil", err)
+	}
+
+	if len(stats) != 3 {
+		t.Errorf("Got: %d - Expected 3", len(stats))
+	}
+}
+
+func TestAggregatePerformanceStatsMapsShouldAddInformationFromTwoMapsWithStats(t *testing.T) {
+	ps := realPs()
+	scriptProc := startPerfTestScript(t)
+
+	stats1, _ := CollectPerformanceStats(scriptProc.Pid, &ps)
+	defer killProcs(stats1)
+
+	killProcWithMaxPid(t, stats1)
+
+	stats2, _ := CollectPerformanceStats(scriptProc.Pid, &ps)
+
+	aggregatedStats := AggregatePerformanceStatsMaps(stats1, stats2)
+
+	if len(aggregatedStats) != 3 {
+		t.Errorf("Got: %d - Expected 3", len(aggregatedStats))
+	}
+}
+
+func TestAggregatePerformanceStatsShouldSumStatsFromMultipleProcesses(t *testing.T) {
+	ps := realPs()
+	scriptProc := startPerfTestScript(t)
+
+	stats1, _ := CollectPerformanceStats(scriptProc.Pid, &ps)
+	defer killProcs(stats1)
+
+	aggregatedProcStats := AggregatePerformanceStats(stats1)
+
+	utimeSum := float64(0)
+	for _, procStats := range stats1 {
+		utimeSum += procStats.Utime
+	}
+
+	if aggregatedProcStats.Utime != utimeSum {
+		t.Errorf("Got: %f - Expected %f", aggregatedProcStats.Utime, utimeSum)
+	}
+
+	killProcWithMaxPid(t, stats1)
+
+	time.Sleep(1 * time.Second)
+
+	stats2, _ := CollectPerformanceStats(scriptProc.Pid, &ps)
+
+	stats3 := AggregatePerformanceStatsMaps(stats1, stats2)
+	aggregatedProcStats = AggregatePerformanceStats(stats3)
+
+	utimeSum = float64(0)
+	for _, procStats := range stats3 {
+		utimeSum += procStats.Utime
+	}
+
+	if aggregatedProcStats.Utime != utimeSum {
+		t.Errorf("Got: %f - Expected %f", aggregatedProcStats.Utime, utimeSum)
+	}
+
+	if aggregatedProcStats.ProcessCount != 3 {
+		t.Errorf("Got: %d - Expected 3", aggregatedProcStats.ProcessCount)
 	}
 }

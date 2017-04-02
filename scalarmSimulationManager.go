@@ -15,7 +15,7 @@ import (
 )
 
 // VERSION current version of the app
-const VERSION string = "17.02"
+const VERSION string = "17.04"
 
 // Fatal utility function to log a fatal error
 func Fatal(err error) {

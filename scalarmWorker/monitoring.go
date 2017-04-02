@@ -11,6 +11,8 @@ import (
 	psproc "github.com/shirou/gopsutil/process"
 )
 
+var newProcessFunc = psproc.NewProcess
+
 // PsUtil is a struct, which includes two ps functions: host and cpu related
 type PsUtil struct {
 	getHostInfo    func() (*pshost.InfoStat, error)
@@ -114,6 +116,8 @@ type PerformanceStats struct {
 	// in bytes
 	ReadBytes  uint64 `json:"read_bytes"`
 	WriteBytes uint64 `json:"write_bytes"`
+
+	ProcessCount uint64 `json:"process_count"`
 }
 
 func extractTimes(stats *PerformanceStats, cpuInfo *pscpu.TimesStat) {
@@ -160,31 +164,39 @@ func aggregateStats(stats1 *PerformanceStats, stats2 *PerformanceStats) *Perform
 	stats1.Vms += stats2.Vms
 	stats1.WriteBytes += stats2.WriteBytes
 	stats1.WriteCount += stats2.WriteCount
+	stats1.ProcessCount += stats2.ProcessCount
 
 	return stats1
 }
 
-func CollectPerformanceStats(pid int, ps *PsUtil) (*PerformanceStats, error) {
-	process, err := psproc.NewProcess(int32(pid))
+// CollectPerformanceStats - given a PID and a pointer to psutil struct, this function returns
+// an error when there is no process with the given PID
+// or a map [PID] = PerformanceStats struct for the given PID and all of its children
+func CollectPerformanceStats(pid int, ps *PsUtil) (map[int32]*PerformanceStats, error) {
+	process, err := newProcessFunc(int32(pid))
 
 	if err != nil {
-		return nil, errors.New("Could not create process with pid " + strconv.Itoa(pid))
+		return nil, errors.New("Could not create process with pid " + strconv.Itoa(pid) + ": " + err.Error())
 	}
+
+	var processesStats = make(map[int32]*PerformanceStats)
 
 	stats, err := ExtractPerformanceStats(process, ps)
 	if err != nil {
 		return nil, errors.New("Could not extract performance stats for pid " + strconv.Itoa(pid))
 	}
 
+	processesStats[int32(pid)] = stats
+
 	childrenProcs := collectChildrenProcesses(process)
 	for _, childProc := range childrenProcs {
 		childStats, err := ExtractPerformanceStats(childProc, ps)
 		if err == nil {
-			stats = aggregateStats(stats, childStats)
+			processesStats[childProc.Pid] = childStats
 		}
 	}
 
-	return stats, nil
+	return processesStats, nil
 }
 
 // ExtractPerformanceStats reads resource consumption for the given pid
@@ -210,8 +222,42 @@ func ExtractPerformanceStats(process *psproc.Process, ps *PsUtil) (*PerformanceS
 	extractIoInfo(perfStats, ioStats)
 	extractMemInfo(perfStats, memoryStat)
 	extractTimes(perfStats, cpuStats)
+	perfStats.ProcessCount = 1
 
 	return perfStats, nil
+}
+
+// AggregatePerformanceStatsMaps makes a union of two perf stats, assumes the second
+// argument are measurements collected after the first argument
+func AggregatePerformanceStatsMaps(stats1 map[int32]*PerformanceStats, stats2 map[int32]*PerformanceStats) map[int32]*PerformanceStats {
+	agg := make(map[int32]*PerformanceStats)
+
+	for pid, stats := range stats1 {
+		if newerStats, ok := stats2[pid]; ok {
+			agg[pid] = newerStats
+		} else {
+			agg[pid] = stats
+		}
+	}
+
+	for pid, stats := range stats2 {
+		if _, ok := agg[pid]; !ok {
+			agg[pid] = stats
+		}
+	}
+
+	return agg
+}
+
+// AggregatePerformanceStats - sums stats regarind a process and its children into a single struct
+func AggregatePerformanceStats(stats map[int32]*PerformanceStats) *PerformanceStats {
+	agg := new(PerformanceStats)
+
+	for _, procStats := range stats {
+		agg = aggregateStats(agg, procStats)
+	}
+
+	return agg
 }
 
 // RunProcessMonitoring starts online process monitoring till process ends
@@ -237,15 +283,23 @@ func RunProcessMonitoring(pid int, sim *SimulationManager, em *ExperimentManager
 
 	if sim.Config.MonitoringInterval > 0 {
 		pidExist, pidCheckErr := psproc.PidExists(int32(pid))
+		// initialize an empty map for last stats
+		lastPerformanceStats := make(map[int32]*PerformanceStats)
 
 		for pidExist && pidCheckErr == nil {
-			performanceStats, err := CollectPerformanceStats(pid, &ps)
+			// this gets current stats
+			currentPerformanceStats, err := CollectPerformanceStats(pid, &ps)
 			if err != nil {
 				fmt.Printf("[SiM] Could not extract performance statistics - %v\n", err)
 				return
 			}
+			// aggregate last and current stats
+			lastPerformanceStats = AggregatePerformanceStatsMaps(lastPerformanceStats, currentPerformanceStats)
+			// sum stats from all processes into a single struct
+			aggregatedPerformanceStats := AggregatePerformanceStats(lastPerformanceStats)
 
-			err = em.ReportPerformanceStats(simulationIndex, performanceStats)
+			// report aggregated stats
+			err = em.ReportPerformanceStats(simulationIndex, aggregatedPerformanceStats)
 			if err != nil {
 				fmt.Printf("[SiM] An error occurred during 'ReportPerformanceStats' - %v\n", err)
 			}

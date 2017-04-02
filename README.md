@@ -56,3 +56,10 @@ Command line options
 Run
 ----
 Before running program you have to copy contents of config folder to folder with executable file of Scalarm Simulation Manager. By default it will be $GOPATH/bin
+
+Testing
+-------
+To run all test execute in the main directory
+````
+go test -v ./...
+````
