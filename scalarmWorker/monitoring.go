@@ -166,6 +166,10 @@ func aggregateStats(stats1 *PerformanceStats, stats2 *PerformanceStats) *Perform
 	stats1.WriteCount += stats2.WriteCount
 	stats1.ProcessCount += stats2.ProcessCount
 
+	if stats2.Timestamp > stats1.Timestamp {
+		stats1.Timestamp = stats2.Timestamp
+	}
+
 	return stats1
 }
 

@@ -200,6 +200,10 @@ func TestExtractPerformanceStatsShouldReturnFilledStructWhenNoErrorsOccur(t *tes
 		t.Errorf("Got: '%v' - Expected nil", err)
 	}
 
+	if perfStats.Timestamp <= 0 {
+		t.Errorf("Got: '%v' - Expected something more than 0", perfStats.Timestamp)
+	}
+
 	if perfStats.Utime != 1.0 {
 		t.Errorf("Got: '%v' - Expected '1.0'", perfStats.Utime)
 	}
@@ -358,4 +362,9 @@ func TestAggregatePerformanceStatsShouldSumStatsFromMultipleProcesses(t *testing
 	if aggregatedProcStats.ProcessCount != 3 {
 		t.Errorf("Got: %d - Expected 3", aggregatedProcStats.ProcessCount)
 	}
+
+	if aggregatedProcStats.Timestamp <= 0 {
+		t.Errorf("Got: '%v' - Expected something more than 0", aggregatedProcStats.Timestamp)
+	}
+
 }
