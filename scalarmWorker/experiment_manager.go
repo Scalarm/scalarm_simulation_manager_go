@@ -176,6 +176,7 @@ func (em *ExperimentManager) PostProgressInfo(simulationIndex int, results url.V
 	return nil
 }
 
+// ReportHostInfo sends information about the host where computations are executed
 func (em *ExperimentManager) ReportHostInfo(simulationIndex int, hostInfo *HostInfo) error {
 	jsonStr, _ := json.Marshal(hostInfo)
 	requestData := url.Values{}
@@ -185,11 +186,11 @@ func (em *ExperimentManager) ReportHostInfo(simulationIndex int, hostInfo *HostI
 	reqInfo := RequestInfo{"POST", strings.NewReader(requestData.Encode()), "application/x-www-form-urlencoded", url}
 
 	resp, err := ExecuteScalarmRequest(reqInfo, em.BaseUrls, em.Config, em.HttpClient, em.CommunicationTimeout)
-	defer resp.Body.Close()
-
 	if err != nil {
 		return err
 	}
+
+	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		return errors.New("Experiment manager response code: " + strconv.Itoa(resp.StatusCode))
