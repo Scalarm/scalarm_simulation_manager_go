@@ -9,7 +9,7 @@ services:
 #- x.x.x #current go version
 
 script:
-  - export REPO=scalarm/scalarm_workers_manager
+  - export REPO=scalarm/scalarm_simulation_manager
   - docker build . -f Dockerfile -t $REPO 
  
 
