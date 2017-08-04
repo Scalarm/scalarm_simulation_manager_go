@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/Dragner8/scalarm_simulation_manager_go.svg?branch=master)](https://travis-ci.org/Dragner8/scalarm_simulation_manager_go)   [![Codacy Badge](https://api.codacy.com/project/badge/Grade/cf4f2afcbefe46ffaff607f5090c055e)](https://www.codacy.com/app/Dragner8/scalarm_simulation_manager_go?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=Dragner8/scalarm_simulation_manager_go&amp;utm_campaign=Badge_Grade)
+[![Build Status](https://travis-ci.org/Scalarm/scalarm_simulation_manager_go.svg?branch=master)](https://travis-ci.org/Scalarm/scalarm_simulation_manager_go)   [![Codacy Badge](https://api.codacy.com/project/badge/Grade/cf4f2afcbefe46ffaff607f5090c055e)](https://www.codacy.com/app/Dragner8/scalarm_simulation_manager_go?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=Dragner8/scalarm_simulation_manager_go&amp;utm_campaign=Badge_Grade)
 
 scalarm_simulation_manager_go
 =============================
